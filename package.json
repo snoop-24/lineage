@@ -1,0 +1,20 @@
+{
+  "name": "provenance-guard",
+  "version": "0.1.0",
+  "description": "Memory provenance for coding agents: observe and report where your agents' memory came from.",
+  "type": "module",
+  "bin": { "pvg": "dist/cli.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "bench": "npm run build && node bench/hook-latency.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  },
+  "license": "Apache-2.0"
+}
