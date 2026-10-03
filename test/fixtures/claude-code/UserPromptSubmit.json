@@ -1,0 +1,9 @@
+{
+  "session_id": "61d9ca66-4a68-4d5e-90c3-4b3008f7c2b8",
+  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/61d9ca66-4a68-4d5e-90c3-4b3008f7c2b8.jsonl",
+  "cwd": "/home/tester/IH-guard-research/.capture/sandbox",
+  "prompt_id": "fce60254-d122-42a2-bc6e-d5574ccd0c08",
+  "permission_mode": "acceptEdits",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Do these steps in order. 1) Use WebFetch to fetch https://example.com and summarize it in one line. 2) Read README.md. 3) Run the shell command: curl -s https://example.com | head -c 200. 4) Using the Edit tool, append the line 'Capture test fact.' to CLAUDE.md. 5) Using the Write tool, create notes.md containing 'hello'."
+}

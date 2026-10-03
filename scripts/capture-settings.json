@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"$PROJECT_ROOT/scripts/capture-hook.mjs\"" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"$PROJECT_ROOT/scripts/capture-hook.mjs\"" }] }],
+    "PostToolUse": [{ "matcher": "Write|Edit|MultiEdit|NotebookEdit|Read|WebFetch|WebSearch|Bash|mcp__.*", "hooks": [{ "type": "command", "command": "node \"$PROJECT_ROOT/scripts/capture-hook.mjs\"" }] }],
+    "InstructionsLoaded": [{ "hooks": [{ "type": "command", "command": "node \"$PROJECT_ROOT/scripts/capture-hook.mjs\"" }] }],
+    "ConfigChange": [{ "hooks": [{ "type": "command", "command": "node \"$PROJECT_ROOT/scripts/capture-hook.mjs\"" }] }]
+  }
+}

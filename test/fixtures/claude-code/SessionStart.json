@@ -1,0 +1,7 @@
+{
+  "session_id": "61d9ca66-4a68-4d5e-90c3-4b3008f7c2b8",
+  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/61d9ca66-4a68-4d5e-90c3-4b3008f7c2b8.jsonl",
+  "cwd": "/home/tester/IH-guard-research/.capture/sandbox",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}
