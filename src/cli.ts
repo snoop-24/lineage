@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { VERSION } from "./version.ts";
+import { hookCommand } from "./cli/hook.ts";
 
 process.umask(0o077);
 
@@ -16,7 +17,9 @@ Usage:
   pvg log [--session <id>] [--kind <kind>] [--limit <n>]
 `;
 
-const commands: Record<string, Command> = {};
+const commands: Record<string, Command> = {
+  hook: hookCommand,
+};
 
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
