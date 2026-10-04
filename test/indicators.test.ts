@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { performance } from "node:perf_hooks";
 import { extractIndicators, normalizeWords, shingles, firstSharedShingle } from "../src/core/indicators.ts";
 
 test("extracts typed, lowercased indicators", () => {
@@ -35,4 +36,30 @@ test("shingles and first shared shingle", () => {
   const b = shingles(normalizeWords("zero one two three four five six seven eight"));
   assert.equal(firstSharedShingle(a, b), "one two three four five six seven eight");
   assert.equal(firstSharedShingle(a, new Set()), null);
+});
+
+test("extractIndicators stays fast on long unbroken input", () => {
+  // Test with 200k repeated "a"
+  const start1 = performance.now();
+  extractIndicators("a".repeat(200_000));
+  const end1 = performance.now();
+  const time1 = end1 - start1;
+  console.log(`  200k × "a": ${time1.toFixed(2)} ms`);
+  assert.ok(time1 < 250, `expected < 250ms, got ${time1.toFixed(2)}ms`);
+
+  // Test with 200k repeated "1"
+  const start2 = performance.now();
+  extractIndicators("1".repeat(200_000));
+  const end2 = performance.now();
+  const time2 = end2 - start2;
+  console.log(`  200k × "1": ${time2.toFixed(2)} ms`);
+  assert.ok(time2 < 250, `expected < 250ms, got ${time2.toFixed(2)}ms`);
+
+  // Test with 100k repeated "a."
+  const start3 = performance.now();
+  extractIndicators("a.".repeat(100_000));
+  const end3 = performance.now();
+  const time3 = end3 - start3;
+  console.log(`  100k × "a.": ${time3.toFixed(2)} ms`);
+  assert.ok(time3 < 250, `expected < 250ms, got ${time3.toFixed(2)}ms`);
 });
