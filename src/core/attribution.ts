@@ -173,7 +173,7 @@ function attributeOne(
 
   const prior = ev.sessionId ? getSessionEvents(cache, store, ev.sessionId).filter((e) => e.id < ev.id) : [];
   const trustedIndicators = new Set<string>(extractIndicators(prevText ?? ""));
-  const untrusted: Array<{ ref: SourceRef; text: string | null; indicators: Set<string> }> = [];
+  const untrusted: Array<{ ref: SourceRef; info: CachedIngest }> = [];
   const changeMs = Date.parse(ev.ts);
   let evidencePruned = false;
 
@@ -203,8 +203,7 @@ function attributeOne(
     const secondsBefore = Math.max(0, Math.round((changeMs - Date.parse(p.ts)) / 1000));
     untrusted.push({
       ref: { eventId: p.id, sourceKind: p.sourceKind, sourceId: p.sourceId, ts: p.ts, secondsBefore },
-      text: ingestInfo.text,
-      indicators: ingestInfo.indicators,
+      info: ingestInfo,
     });
   }
 
@@ -213,12 +212,13 @@ function attributeOne(
   const addedIndicators = extractIndicators(addedText);
   const matches: Match[] = [];
   for (const u of untrusted) {
-    if (u.text !== null && addedShingles.size > 0) {
-      const shared = firstSharedShingle(addedShingles, shingles(normalizeWords(u.text)));
+    if (u.info.text !== null && addedShingles.size > 0) {
+      u.info.shingles ??= shingles(normalizeWords(u.info.text));
+      const shared = firstSharedShingle(addedShingles, u.info.shingles);
       if (shared) matches.push({ ...u.ref, kind: "words", evidence: shared });
     }
     for (const i of addedIndicators) {
-      if (u.indicators.has(i) && !trustedIndicators.has(i)) matches.push({ ...u.ref, kind: "indicator", evidence: i });
+      if (u.info.indicators.has(i) && !trustedIndicators.has(i)) matches.push({ ...u.ref, kind: "indicator", evidence: i });
     }
   }
 
