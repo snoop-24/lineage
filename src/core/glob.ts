@@ -1,5 +1,7 @@
 // Minimal glob → RegExp: `**` (any depth, including zero dirs when followed by `/`), `*` (one segment), `?`.
 export function globToRegExp(glob: string): RegExp {
+  // Collapse runs of consecutive **/ into a single **/
+  glob = glob.replace(/(?:\*\*\/){2,}/g, "**/");
   let re = "";
   let i = 0;
   while (i < glob.length) {

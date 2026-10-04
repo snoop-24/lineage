@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { globToRegExp } from "../src/core/glob.ts";
 import {
   addRule, classify, defaultTier, inferRule, loadTrust, parseTier, proposeTrust, removeRule, saveTrust,
@@ -103,4 +104,52 @@ test("rule editing, tier aliases, rule inference, load/save validation", () => {
   } finally {
     t.cleanup();
   }
+});
+
+test("loadTrust handles corrupt JSON and null values without throwing", () => {
+  const t = tempDir();
+  try {
+    const p = join(t.path, "trust.json");
+    // Missing file returns empty
+    assert.deepEqual(loadTrust(p), { rules: [] });
+    // File containing null should return empty
+    writeFileSync(p, "null");
+    assert.deepEqual(loadTrust(p), { rules: [] });
+    // Invalid JSON should return empty
+    writeFileSync(p, "{not json");
+    assert.deepEqual(loadTrust(p), { rules: [] });
+    // Array should return empty (arrays parse as objects but have no .rules)
+    writeFileSync(p, "[]");
+    assert.deepEqual(loadTrust(p), { rules: [] });
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("glob avoids backtracking on consecutive **/", () => {
+  // Consecutive **/ patterns should still work
+  assert.ok(globToRegExp("**/**/CLAUDE.md").test("CLAUDE.md"));
+  assert.ok(globToRegExp("**/**/CLAUDE.md").test("x/y/CLAUDE.md"));
+
+  // Heavy backtracking test: many **/ should be fast (< 50ms)
+  const pattern = "**/**/**/**/**/**/**/x";
+  const testString = "a/".repeat(60) + "y";
+  const start = performance.now();
+  const result = globToRegExp(pattern).test(testString);
+  const elapsed = performance.now() - start;
+
+  assert.equal(result, false, "pattern should not match");
+  assert.ok(elapsed < 50, `test should complete in < 50ms, took ${elapsed.toFixed(2)}ms`);
+});
+
+test("inferRule extracts correct server and domain segments", () => {
+  // mcp: should extract only server name, not full path
+  assert.deepEqual(inferRule("mcp:github/get_issue"), { type: "mcp_server", match: "github" });
+  // scheme-less domain with path should extract only domain
+  assert.deepEqual(inferRule("python.org/3/"), { type: "domain", match: "python.org" });
+  // existing tests should still pass
+  assert.deepEqual(inferRule("mcp:github"), { type: "mcp_server", match: "github" });
+  assert.deepEqual(inferRule("~/notes/**"), { type: "path", match: "~/notes/**" });
+  assert.deepEqual(inferRule("https://Docs.Python.org/3/"), { type: "domain", match: "docs.python.org" });
+  assert.deepEqual(inferRule("docs.python.org"), { type: "domain", match: "docs.python.org" });
 });

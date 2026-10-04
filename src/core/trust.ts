@@ -33,19 +33,24 @@ export const isUntrusted = (t: Tier): boolean => t === "T3" || t === "T4";
 
 export function loadTrust(path: string): TrustConfig {
   if (!existsSync(path)) return { rules: [] };
-  const raw = JSON.parse(readFileSync(path, "utf8")) as { rules?: unknown };
-  const rules: TrustRule[] = [];
-  if (Array.isArray(raw.rules)) {
-    for (const r of raw.rules) {
-      if (!r || typeof r !== "object") continue;
-      const { type, match, tier } = r as Record<string, unknown>;
-      if (typeof type === "string" && typeof match === "string" && typeof tier === "string" && match.length > 0 &&
-          RULE_TYPES.has(type) && RULE_TIERS.has(tier)) {
-        rules.push({ type: type as RuleType, match, tier: tier as RuleTier });
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as { rules?: unknown };
+    if (raw === null || typeof raw !== "object") return { rules: [] };
+    const rules: TrustRule[] = [];
+    if (Array.isArray(raw.rules)) {
+      for (const r of raw.rules) {
+        if (!r || typeof r !== "object") continue;
+        const { type, match, tier } = r as Record<string, unknown>;
+        if (typeof type === "string" && typeof match === "string" && typeof tier === "string" && match.length > 0 &&
+            RULE_TYPES.has(type) && RULE_TIERS.has(tier)) {
+          rules.push({ type: type as RuleType, match, tier: tier as RuleTier });
+        }
       }
     }
+    return { rules };
+  } catch {
+    return { rules: [] };
   }
-  return { rules };
 }
 
 export function saveTrust(path: string, cfg: TrustConfig): void {
@@ -183,8 +188,12 @@ export function parseTier(s: string): RuleTier | null {
 }
 
 export function inferRule(source: string): { type: RuleType; match: string } {
-  if (source.startsWith("mcp:")) return { type: "mcp_server", match: source.slice(4) };
+  if (source.startsWith("mcp:")) {
+    const server = source.slice(4).split("/")[0] ?? "";
+    return { type: "mcp_server", match: server };
+  }
   if (source.startsWith("/") || source.startsWith("~")) return { type: "path", match: source };
   const host = sourceHost(source);
-  return { type: "domain", match: host ?? source.toLowerCase() };
+  const domain = host ?? source.toLowerCase().split("/")[0] ?? "";
+  return { type: "domain", match: domain };
 }
