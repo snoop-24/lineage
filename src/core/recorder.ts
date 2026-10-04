@@ -165,12 +165,13 @@ function scanAndRecord(
     if (!prev) {
       if (!cur && !t.trackAbsent) continue;
       if (cur) d.store.putBlob(cur.text, NO_CAP);
+      // Record the event before persisting the row: if the insert throws, the next scan sees the file as new again.
+      if (cur && !(context === "between_sessions" && !baselinedFor(t.scope))) {
+        d.store.insertEvent(
+          newEvent(ev, { kind: "scan_change", surfacePath: t.path, blobSha: newSha, prevBlobSha: null, detail: { context, change: "created", command } }),
+        );
+      }
       d.store.upsertSurface({ path: t.path, scope: t.scope, projectRoot: scopeRoot(t.scope, ev.projectRoot), lastSha: newSha, lastSeenAt: ev.ts });
-      if (!cur) continue;
-      if (context === "between_sessions" && !baselinedFor(t.scope)) continue;
-      d.store.insertEvent(
-        newEvent(ev, { kind: "scan_change", surfacePath: t.path, blobSha: newSha, prevBlobSha: null, detail: { context, change: "created", command } }),
-      );
       continue;
     }
     if (prev.lastSha === newSha) continue;

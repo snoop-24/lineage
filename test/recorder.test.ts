@@ -140,3 +140,58 @@ test("a new surface appearing between sessions in a known project is recorded as
     f.cleanup();
   }
 });
+
+test("a new memory file appearing between sessions in a known memory dir is recorded as created", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    writeFileSync(join(f.memoryDir, "planted.md"), "planted\n");
+    record({ ...f.base("s2"), kind: "session_start", permissionMode: null }, f.deps);
+    const c = f.store.listEvents({ kind: "scan_change" }).find((e) => e.surfacePath === join(f.memoryDir, "planted.md"));
+    assert.equal(c?.detail?.change, "created");
+    assert.equal(c?.detail?.context, "between_sessions");
+    assert.equal(c?.sessionId, "s2");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("first-ever memory discovery stays silent", () => {
+  const f = recorderFixture();
+  try {
+    writeFileSync(join(f.memoryDir, "existing.md"), "already here\n");
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    assert.equal(f.store.listEvents({ kind: "scan_change" }).filter((e) => e.surfacePath === join(f.memoryDir, "existing.md")).length, 0);
+    assert.ok(f.store.getSurface(join(f.memoryDir, "existing.md"))?.lastSha);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("created event is recorded before the first-sighted row, so a failed insert is retried next scan", () => {
+  const f = recorderFixture();
+  const original = f.store.insertEvent.bind(f.store);
+  try {
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    mkdirSync(join(f.proj, "packages", "b"), { recursive: true });
+    const planted = join(f.proj, "packages", "b", "CLAUDE.md");
+    writeFileSync(planted, "planted\n");
+    let thrown = false;
+    f.store.insertEvent = (e) => {
+      if (e.kind === "scan_change" && !thrown) {
+        thrown = true;
+        throw new Error("SQLITE_BUSY");
+      }
+      return original(e);
+    };
+    assert.throws(() => record({ ...f.base("s2"), kind: "session_start", permissionMode: null }, f.deps), /SQLITE_BUSY/);
+    f.store.insertEvent = original;
+    record({ ...f.base("s3"), kind: "session_start", permissionMode: null }, f.deps);
+    const c = f.store.listEvents({ kind: "scan_change" }).find((e) => e.surfacePath === planted);
+    assert.equal(c?.detail?.change, "created");
+    assert.equal(c?.sessionId, "s3");
+  } finally {
+    f.store.insertEvent = original;
+    f.cleanup();
+  }
+});
