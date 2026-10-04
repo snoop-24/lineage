@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { handleHookInput } from "../src/cli/hook.ts";
@@ -11,6 +11,19 @@ import { tempDir } from "./helpers.ts";
 function env(root: string): Env {
   return { home: join(root, "home"), dataDir: join(root, "data"), claudeSettingsPath: join(root, "home", ".claude", "settings.json") };
 }
+
+test("handleHookInput never throws, even when dataDir is a regular file", () => {
+  const t = tempDir();
+  try {
+    const e = env(t.path);
+    writeFileSync(e.dataDir, "");
+    assert.doesNotThrow(() => {
+      handleHookInput(JSON.stringify({ hook_event_name: "SessionStart", session_id: "s1", cwd: t.path }), e);
+    });
+  } finally {
+    t.cleanup();
+  }
+});
 
 test("invalid input is logged, never thrown", () => {
   const t = tempDir();
@@ -61,6 +74,7 @@ test("CLI hook exits 0 and prints nothing, even on garbage", () => {
     });
     assert.equal(r.status, 0);
     assert.equal(r.stdout, "");
+    assert.equal(r.stderr, "");
   } finally {
     t.cleanup();
   }

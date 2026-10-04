@@ -52,11 +52,17 @@ export async function readStdin(): Promise<string> {
 }
 
 export async function hookCommand(_args: string[]): Promise<number> {
-  const env = resolveEnv();
-  const text = await readStdin().catch((err: unknown) => {
-    logError(env.dataDir, err);
-    return "";
-  });
-  handleHookInput(text, env);
+  let env: Env | null = null;
+  try {
+    env = resolveEnv();
+    const dataDir = env.dataDir;
+    const text = await readStdin().catch((err: unknown) => {
+      logError(dataDir, err);
+      return "";
+    });
+    handleHookInput(text, env);
+  } catch (err) {
+    if (env) logError(env.dataDir, err);
+  }
   return 0;
 }
