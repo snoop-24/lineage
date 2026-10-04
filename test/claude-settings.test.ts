@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  addDenyRule, addHooks, HOOK_EVENTS, hooksInstalled, readSettings, removeDenyRule, removeHooks,
-  writeSettingsWithBackup, type Settings,
+  addDenyRule, addHooks, HOOK_EVENTS, hookInstalledFor, hooksInstalled, readSettings, removeDenyRule, removeHooks,
+  writeSettingsWithBackup, type HookEvent, type Settings,
 } from "../src/claude-settings.ts";
 import { tempDir } from "./helpers.ts";
 
@@ -52,4 +52,78 @@ test("read/write with backup", () => {
   } finally {
     t.cleanup();
   }
+});
+
+test("hooksInstalled is false when matcher is altered or type is changed", () => {
+  const original = addHooks({}, CMD);
+
+  // (a) PostToolUse matcher changed to "NoSuchTool"
+  const tamperedMatcher = JSON.parse(JSON.stringify(original));
+  tamperedMatcher.hooks.PostToolUse[0].matcher = "NoSuchTool";
+  assert.equal(hooksInstalled(tamperedMatcher, CMD), false, "should fail when PostToolUse matcher altered");
+
+  // (b) Any pvg entry's type changed to "prompt"
+  const tamperedType = JSON.parse(JSON.stringify(original));
+  tamperedType.hooks.PostToolUse[0].hooks[0].type = "prompt";
+  assert.equal(hooksInstalled(tamperedType, CMD), false, "should fail when entry type altered");
+
+  // (c) matcher: "startup" added to SessionStart pvg group
+  const tamperedSessionStart = JSON.parse(JSON.stringify(original));
+  tamperedSessionStart.hooks.SessionStart[0].matcher = "startup";
+  assert.equal(hooksInstalled(tamperedSessionStart, CMD), false, "should fail when SessionStart has matcher");
+
+  // (d) One event's array is deleted
+  const tamperedDeleted = JSON.parse(JSON.stringify(original));
+  delete tamperedDeleted.hooks.SessionStart;
+  assert.equal(hooksInstalled(tamperedDeleted, CMD), false, "should fail when event array deleted");
+
+  // Different command string
+  assert.equal(hooksInstalled(original, "different-command"), false, "should fail for different command");
+});
+
+test("addHooks repairs tampered installations", () => {
+  // (a) Repaired from altered matcher
+  let tampered = JSON.parse(JSON.stringify(addHooks({}, CMD)));
+  tampered.hooks.PostToolUse[0].matcher = "NoSuchTool";
+  assert.equal(hooksInstalled(tampered, CMD), false);
+  const repaired_a = addHooks(tampered, CMD);
+  assert.equal(hooksInstalled(repaired_a, CMD), true, "should repair altered matcher");
+
+  // (b) Repaired from altered type
+  tampered = JSON.parse(JSON.stringify(addHooks({}, CMD)));
+  tampered.hooks.PostToolUse[0].hooks[0].type = "prompt";
+  assert.equal(hooksInstalled(tampered, CMD), false);
+  const repaired_b = addHooks(tampered, CMD);
+  assert.equal(hooksInstalled(repaired_b, CMD), true, "should repair altered type");
+
+  // (c) Repaired from added matcher on SessionStart
+  tampered = JSON.parse(JSON.stringify(addHooks({}, CMD)));
+  tampered.hooks.SessionStart[0].matcher = "startup";
+  assert.equal(hooksInstalled(tampered, CMD), false);
+  const repaired_c = addHooks(tampered, CMD);
+  assert.equal(hooksInstalled(repaired_c, CMD), true, "should repair added matcher");
+
+  // Verify exactly one pvg entry per event after repair
+  for (const ev of HOOK_EVENTS) {
+    const groups = repaired_c.hooks?.[ev] ?? [];
+    let pvgEntryCount = 0;
+    for (const g of groups) {
+      for (const h of g.hooks ?? []) {
+        if (h.command === CMD) pvgEntryCount++;
+      }
+    }
+    assert.equal(pvgEntryCount, 1, `should have exactly one pvg entry for ${ev}`);
+  }
+});
+
+test("hookInstalledFor exported and works correctly", () => {
+  const installed = addHooks({}, CMD);
+  for (const ev of HOOK_EVENTS) {
+    assert.equal(hookInstalledFor(installed, ev as HookEvent, CMD), true, `hookInstalledFor should be true for ${ev}`);
+  }
+
+  // Verify it returns false when altered
+  const tampered = JSON.parse(JSON.stringify(installed));
+  tampered.hooks.PostToolUse[0].matcher = "NoSuchTool";
+  assert.equal(hookInstalledFor(tampered, "PostToolUse" as HookEvent, CMD), false, "should detect altered matcher");
 });

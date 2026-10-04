@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname } from "node:path";
 
 export const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PostToolUse", "InstructionsLoaded", "ConfigChange"] as const;
+export type HookEvent = (typeof HOOK_EVENTS)[number];
 export const POST_TOOL_MATCHER = "Write|Edit|MultiEdit|NotebookEdit|Read|WebFetch|WebSearch|Bash|mcp__.*";
 export const HOOK_TIMEOUT_SECONDS = 10;
 
@@ -35,20 +36,34 @@ function groupHasCommand(g: MatcherGroup, command: string): boolean {
   return Array.isArray(g.hooks) && g.hooks.some((h) => h.command === command);
 }
 
+export function hookInstalledFor(s: Settings, ev: HookEvent, command: string): boolean {
+  const groups = s.hooks?.[ev] ?? [];
+  return groups.some((g) => {
+    // Matcher: for PostToolUse, must equal POST_TOOL_MATCHER; for others, must be undefined or empty string
+    const matcherOk = ev === "PostToolUse" ? g.matcher === POST_TOOL_MATCHER : (g.matcher === undefined || g.matcher === "");
+    // Entry: must have array of hooks with an entry where type === "command" and command === the specified command
+    const hasEntry = Array.isArray(g.hooks) && g.hooks.some((h) => h.type === "command" && h.command === command);
+    return matcherOk && hasEntry;
+  });
+}
+
 export function hooksInstalled(s: Settings, command: string): boolean {
-  return HOOK_EVENTS.every((ev) => (s.hooks?.[ev] ?? []).some((g) => groupHasCommand(g, command)));
+  return HOOK_EVENTS.every((ev) => hookInstalledFor(s, ev as HookEvent, command));
 }
 
 export function addHooks(s: Settings, command: string): Settings {
-  const hooks: Record<string, MatcherGroup[]> = { ...(s.hooks ?? {}) };
+  // Start by removing any existing pvg hooks to repair tampered installations
+  const cleaned = removeHooks(s, command);
+  const hooks: Record<string, MatcherGroup[]> = { ...(cleaned.hooks ?? {}) };
+
+  // Add fresh pvg group for each event
   for (const ev of HOOK_EVENTS) {
     const groups = [...(hooks[ev] ?? [])];
-    if (groups.some((g) => groupHasCommand(g, command))) continue;
     const entry: HookCommand = { type: "command", command, timeout: HOOK_TIMEOUT_SECONDS };
     groups.push(ev === "PostToolUse" ? { matcher: POST_TOOL_MATCHER, hooks: [entry] } : { hooks: [entry] });
     hooks[ev] = groups;
   }
-  return { ...s, hooks };
+  return { ...cleaned, hooks };
 }
 
 export function removeHooks(s: Settings, command: string): Settings {
