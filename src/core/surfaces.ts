@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { sha256 } from "./hash.ts";
 import type { SurfaceRow } from "./store.ts";
@@ -70,20 +70,34 @@ export function classifySurfacePath(filePath: string, ctx: SurfaceContext): Surf
 }
 
 export function readSurface(path: string, capBytes = 1_048_576): { sha: string; text: string } | null {
+  let fd: number | undefined;
   try {
-    if (!statSync(path).isFile()) return null;
+    const st = statSync(path);
+    if (!st.isFile()) return null;
+    fd = openSync(path, "r");
+    const size = Math.min(st.size, capBytes);
+    const buf = Buffer.alloc(size);
+    let read = 0;
+    while (read < size) {
+      const n = readSync(fd, buf, read, size - read, read);
+      if (n === 0) break;
+      read += n;
+    }
+    const text = buf.subarray(0, read).toString("utf8");
+    return { sha: sha256(Buffer.from(text, "utf8")), text };
   } catch {
     return null;
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
   }
-  const buf = readFileSync(path);
-  const text = (buf.length > capBytes ? buf.subarray(0, capBytes) : buf).toString("utf8");
-  return { sha: sha256(Buffer.from(text, "utf8")), text };
 }
 
 export function parseImports(text: string, fromFile: string, home: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(IMPORT_RE)) {
-    const raw = m[1];
+    const raw = m[1]?.replace(/[.,;:!?]+$/, "");
     if (!raw || (!raw.includes("/") && !raw.endsWith(".md"))) continue;
     const p = raw.startsWith("~/") ? join(home, raw.slice(2)) : isAbsolute(raw) ? raw : resolve(dirname(fromFile), raw);
     out.add(resolve(p));
@@ -93,6 +107,12 @@ export function parseImports(text: string, fromFile: string, home: string): stri
 
 function walk(root: string, limits: WalkLimits, onFile: (path: string) => void): void {
   if (!existsSync(root)) return;
+  let visited: Set<string>;
+  try {
+    visited = new Set([realpathSync(root)]);
+  } catch {
+    return;
+  }
   const stack: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }];
   let seen = 0;
   while (stack.length > 0) {
@@ -108,8 +128,27 @@ function walk(root: string, limits: WalkLimits, onFile: (path: string) => void):
       seen += 1;
       if (seen > limits.maxEntries) return;
       const full = join(next.dir, e.name);
-      if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) {
+      if (e.isSymbolicLink()) {
+        try {
+          const st = statSync(full);
+          if (st.isFile()) {
+            onFile(full);
+          } else if (st.isDirectory()) {
+            let realpath: string;
+            try {
+              realpath = realpathSync(full);
+            } catch {
+              continue;
+            }
+            if (!visited.has(realpath) && !SKIP_DIRS.has(e.name) && next.depth < limits.maxDepth) {
+              visited.add(realpath);
+              stack.push({ dir: full, depth: next.depth + 1 });
+            }
+          }
+        } catch {
+          continue;
+        }
+      } else if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name) && next.depth < limits.maxDepth) stack.push({ dir: full, depth: next.depth + 1 });
       } else if (e.isFile()) {
         onFile(full);
