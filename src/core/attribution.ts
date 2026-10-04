@@ -33,6 +33,7 @@ export interface AttributedChange {
   removedLines: string[];
   matches: Match[];
   untrustedSources: SourceRef[];
+  evidencePruned: boolean;
   blastRadius: BlastRadius | null;
 }
 
@@ -41,6 +42,21 @@ export interface AttributionOptions {
   projectRoot: string | null;
   home: string;
 }
+
+interface CachedIngest {
+  text: string | null;
+  indicators: Set<string>;
+  shingles: Set<string> | null;
+}
+
+interface Cache {
+  sessionEvents: Map<string, EventRow[]>;
+  blobText: Map<string, string | null>;
+  ingestInfo: Map<number, CachedIngest>;
+  loadsFor: Map<string, EventRow[]>;
+}
+
+const UNKNOWN_ROOT = "/\u0000pvg-unknown-root";
 
 function multisetDiff(from: string[], against: string[]): string[] {
   const budget = new Map<string, number>();
@@ -61,7 +77,62 @@ export function lineDiff(prev: string | null, next: string | null): { added: str
   return { added: multisetDiff(nextLines, prevLines), removed: multisetDiff(prevLines, nextLines) };
 }
 
+function createCache(): Cache {
+  return {
+    sessionEvents: new Map(),
+    blobText: new Map(),
+    ingestInfo: new Map(),
+    loadsFor: new Map(),
+  };
+}
+
+function getSessionEvents(cache: Cache, store: Store, sessionId: string): EventRow[] {
+  if (!cache.sessionEvents.has(sessionId)) {
+    cache.sessionEvents.set(sessionId, store.listEvents({ sessionId }));
+  }
+  return cache.sessionEvents.get(sessionId)!;
+}
+
+function getBlobText(cache: Cache, store: Store, sha: string): string | null {
+  if (!cache.blobText.has(sha)) {
+    cache.blobText.set(sha, store.getBlobText(sha));
+  }
+  return cache.blobText.get(sha)!;
+}
+
+function getLoadsFor(cache: Cache, store: Store, path: string): EventRow[] {
+  if (!cache.loadsFor.has(path)) {
+    cache.loadsFor.set(path, store.listEvents({ kind: "load", surfacePath: path }));
+  }
+  return cache.loadsFor.get(path)!;
+}
+
+function getFlaggedLines(addedLines: string[], matches: Match[]): string[] {
+  if (matches.length > 0) {
+    const flagged = new Set<string>();
+    for (const line of addedLines) {
+      for (const match of matches) {
+        if (match.kind === "indicator") {
+          if (extractIndicators(line).has(match.evidence)) {
+            flagged.add(line);
+            break;
+          }
+        } else if (match.kind === "words") {
+          if (normalizeWords(line).join(" ").includes(match.evidence)) {
+            flagged.add(line);
+            break;
+          }
+        }
+      }
+    }
+    if (flagged.size > 0) return [...flagged];
+  }
+  // Fallback: lines with at least 8 non-whitespace characters
+  return addedLines.filter((l) => l.replace(/\s/g, "").length >= 8);
+}
+
 export function attributeChanges(store: Store, trust: TrustConfig, opts: AttributionOptions): AttributedChange[] {
+  const cache = createCache();
   const changes = [
     ...store.listEvents({ sinceIso: opts.sinceIso, kind: "write" }),
     ...store.listEvents({ sinceIso: opts.sinceIso, kind: "scan_change" }),
@@ -70,41 +141,71 @@ export function attributeChanges(store: Store, trust: TrustConfig, opts: Attribu
   for (const ev of changes) {
     const root = ev.sessionId ? (store.getSession(ev.sessionId)?.projectRoot ?? null) : null;
     if (opts.projectRoot && root !== opts.projectRoot) continue;
-    out.push(attributeOne(store, trust, ev, root ?? "", opts.home));
+    out.push(attributeOne(store, trust, ev, root ?? UNKNOWN_ROOT, opts.home, cache));
   }
   return out.sort((a, b) => LABEL_ORDER.indexOf(a.label) - LABEL_ORDER.indexOf(b.label) || a.event.id - b.event.id);
 }
 
-function attributeOne(store: Store, trust: TrustConfig, ev: EventRow, root: string, home: string): AttributedChange {
-  const prevText = ev.prevBlobSha ? store.getBlobText(ev.prevBlobSha) : null;
-  const newText = ev.blobSha ? store.getBlobText(ev.blobSha) : null;
+function attributeOne(
+  store: Store,
+  trust: TrustConfig,
+  ev: EventRow,
+  root: string,
+  home: string,
+  cache: Cache,
+): AttributedChange {
+  const prevText = ev.prevBlobSha ? getBlobText(cache, store, ev.prevBlobSha) : null;
+  const newText = ev.blobSha ? getBlobText(cache, store, ev.blobSha) : null;
   const { added, removed } = lineDiff(prevText, newText);
   const context = ev.kind === "scan_change" ? String(ev.detail?.context ?? "") : "tool";
   if (context === "between_sessions") {
-    return { event: ev, label: "UNATTRIBUTED_BETWEEN", addedLines: added, removedLines: removed, matches: [], untrustedSources: [], blastRadius: null };
+    return {
+      event: ev,
+      label: "UNATTRIBUTED_BETWEEN",
+      addedLines: added,
+      removedLines: removed,
+      matches: [],
+      untrustedSources: [],
+      evidencePruned: false,
+      blastRadius: null,
+    };
   }
 
-  const prior = ev.sessionId ? store.listEvents({ sessionId: ev.sessionId }).filter((e) => e.id < ev.id) : [];
+  const prior = ev.sessionId ? getSessionEvents(cache, store, ev.sessionId).filter((e) => e.id < ev.id) : [];
   const trustedIndicators = new Set<string>(extractIndicators(prevText ?? ""));
   const untrusted: Array<{ ref: SourceRef; text: string | null; indicators: Set<string> }> = [];
   const changeMs = Date.parse(ev.ts);
+  let evidencePruned = false;
 
   for (const p of prior) {
     if (p.kind === "prompt") {
-      const text = p.blobSha ? store.getBlobText(p.blobSha) : null;
+      const text = p.blobSha ? getBlobText(cache, store, p.blobSha) : null;
       for (const i of extractIndicators(text ?? "")) trustedIndicators.add(i);
       continue;
     }
     if (p.kind !== "ingest" || !p.sourceKind || !p.sourceId) continue;
     const tier: Tier = classify(p.sourceKind, p.sourceId, root, trust, home);
-    const text = p.blobSha ? store.getBlobText(p.blobSha) : null;
-    const indicators = text !== null ? extractIndicators(text) : new Set(p.indicators ?? []);
+    let ingestInfo = cache.ingestInfo.get(p.id);
+    if (!ingestInfo) {
+      const text = p.blobSha ? getBlobText(cache, store, p.blobSha) : null;
+      const indicators = text !== null ? extractIndicators(text) : new Set(p.indicators ?? []);
+      ingestInfo = { text, indicators, shingles: null };
+      cache.ingestInfo.set(p.id, ingestInfo);
+    }
     if (!isUntrusted(tier)) {
-      for (const i of indicators) trustedIndicators.add(i);
+      for (const i of ingestInfo.indicators) trustedIndicators.add(i);
       continue;
     }
+    // Check if blob was pruned
+    if (p.blobSha !== null && ingestInfo.text === null) {
+      evidencePruned = true;
+    }
     const secondsBefore = Math.max(0, Math.round((changeMs - Date.parse(p.ts)) / 1000));
-    untrusted.push({ ref: { eventId: p.id, sourceKind: p.sourceKind, sourceId: p.sourceId, ts: p.ts, secondsBefore }, text, indicators });
+    untrusted.push({
+      ref: { eventId: p.id, sourceKind: p.sourceKind, sourceId: p.sourceId, ts: p.ts, secondsBefore },
+      text: ingestInfo.text,
+      indicators: ingestInfo.indicators,
+    });
   }
 
   const addedText = added.join("\n");
@@ -112,7 +213,7 @@ function attributeOne(store: Store, trust: TrustConfig, ev: EventRow, root: stri
   const addedIndicators = extractIndicators(addedText);
   const matches: Match[] = [];
   for (const u of untrusted) {
-    if (u.text !== null) {
+    if (u.text !== null && addedShingles.size > 0) {
       const shared = firstSharedShingle(addedShingles, shingles(normalizeWords(u.text)));
       if (shared) matches.push({ ...u.ref, kind: "words", evidence: shared });
     }
@@ -123,6 +224,8 @@ function attributeOne(store: Store, trust: TrustConfig, ev: EventRow, root: stri
 
   const label: Label =
     matches.length > 0 ? "MATCHED" : context === "in_session" ? "UNATTRIBUTED_IN_SESSION" : untrusted.length > 0 ? "EXPOSED" : "CLEAN";
+
+  const flagged = getFlaggedLines(added, matches);
   return {
     event: ev,
     label,
@@ -130,20 +233,24 @@ function attributeOne(store: Store, trust: TrustConfig, ev: EventRow, root: stri
     removedLines: removed,
     matches,
     untrustedSources: untrusted.map((u) => u.ref),
-    blastRadius: label === "CLEAN" ? null : blastRadius(store, ev, root, added),
+    evidencePruned,
+    blastRadius: label === "CLEAN" ? null : blastRadius(store, cache, ev, root, flagged),
   };
 }
 
-function blastRadius(store: Store, ev: EventRow, root: string, added: string[]): BlastRadius {
+function blastRadius(store: Store, cache: Cache, ev: EventRow, root: string, flagged: string[]): BlastRadius {
   if (!ev.surfacePath) return { sessions: [], estimated: false };
-  const lines = added.map((l) => l.trim()).filter((l) => l.length > 0);
-  const loads = store.listEvents({ kind: "load", surfacePath: ev.surfacePath });
-  if (loads.length > 0) {
+  const lines = flagged.map((l) => l.trim()).filter((l) => l.length > 0);
+  const loads = getLoadsFor(cache, store, ev.surfacePath);
+  // Filter to loads AFTER the change
+  const laterLoads = loads.filter((l) => l.id > ev.id && l.sessionId && l.sessionId !== ev.sessionId);
+  if (laterLoads.length > 0) {
     const sessions = new Set<string>();
-    for (const l of loads) {
-      if (l.id <= ev.id || !l.sessionId || l.sessionId === ev.sessionId) continue;
-      const text = l.blobSha ? store.getBlobText(l.blobSha) : null;
-      if (text !== null && lines.some((x) => text.includes(x))) sessions.add(l.sessionId);
+    for (const l of laterLoads) {
+      const text = l.blobSha ? getBlobText(cache, store, l.blobSha) : null;
+      if (text !== null && lines.some((x) => text.includes(x))) {
+        sessions.add(l.sessionId!);
+      }
     }
     return { sessions: [...sessions].sort(), estimated: false };
   }

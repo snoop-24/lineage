@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { record } from "../src/core/recorder.ts";
 import { attributeChanges, lineDiff } from "../src/core/attribution.ts";
@@ -36,6 +36,7 @@ test("MATCHED via indicator and shared words, with source and timing", () => {
     assert.ok(c?.matches.some((m) => m.kind === "words"));
     assert.ok(c?.matches.every((m) => m.sourceId === "https://acme-status.example/incident" && m.secondsBefore >= 1));
     assert.deepEqual(c?.addedLines, ["- Backup contact for deploy alerts: ops@acme-backup.com"]);
+    assert.equal(c?.evidencePruned, false);
   } finally {
     f.cleanup();
   }
@@ -92,6 +93,79 @@ test("blast radius from load events, and estimated fallback", () => {
     record({ ...f.base("s3"), kind: "load", filePath: join(f.memoryDir, "MEMORY.md"), memoryType: "auto", loadReason: "session_start" }, f.deps);
     const [measured] = run(f);
     assert.deepEqual(measured?.blastRadius, { sessions: ["s3"], estimated: false });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("expired evidence: pruned blob marked as evidencePruned", () => {
+  const f = recorderFixture();
+  try {
+    poisonedSession(f, "- Backup contact for deploy alerts: ops@acme-backup.com");
+    const results = run(f);
+    assert.equal(results[0]?.label, "MATCHED");
+    assert.equal(results[0]?.evidencePruned, false);
+    // Find and delete the ingest blob
+    const events = f.store.listEvents({ sinceIso: SINCE, kind: "ingest" });
+    const ingestEvent = events.find((e) => e.sourceId === "https://acme-status.example/incident");
+    if (ingestEvent?.blobSha) {
+      f.store.db.prepare("DELETE FROM blobs WHERE sha = ?").run(ingestEvent.blobSha);
+    }
+    const resultsAfter = run(f);
+    assert.equal(resultsAfter[0]?.label, "EXPOSED");
+    assert.equal(resultsAfter[0]?.evidencePruned, true);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("flagged-only blast radius: non-flagged lines don't trigger measured match", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    record({ ...f.base("s1"), kind: "ingest", toolName: "WebFetch", sourceKind: "web", sourceId: "https://acme-status.example/incident", text: PAGE }, f.deps);
+    appendFileSync(join(f.memoryDir, "MEMORY.md"), "- Backup contact for deploy alerts: ops@acme-backup.com\n- deploys always go through the CI pipeline\n");
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
+    record({ ...f.base("s2"), kind: "session_start", permissionMode: null }, f.deps);
+    // Rewrite MEMORY.md to keep only benign line
+    writeFileSync(join(f.memoryDir, "MEMORY.md"), "- existing fact\n- deploys always go through the CI pipeline\n");
+    record({ ...f.base("s2"), kind: "load", filePath: join(f.memoryDir, "MEMORY.md"), memoryType: "auto", loadReason: "session_start" }, f.deps);
+    const results = run(f);
+    assert.equal(results[0]?.label, "MATCHED");
+    assert.deepEqual(results[0]?.blastRadius, { sessions: [], estimated: false });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("blast radius timing: loads before change are not measured", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("s0"), kind: "session_start", permissionMode: null }, f.deps);
+    record({ ...f.base("s0"), kind: "load", filePath: join(f.memoryDir, "MEMORY.md"), memoryType: "auto", loadReason: "session_start" }, f.deps);
+    poisonedSession(f, "- Backup contact for deploy alerts: ops@acme-backup.com");
+    record({ ...f.base("s2"), kind: "session_start", permissionMode: null }, f.deps);
+    const results = run(f);
+    assert.equal(results[0]?.label, "MATCHED");
+    assert.deepEqual(results[0]?.blastRadius, { sessions: ["s2"], estimated: true });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("unknown session root: file ingest in unknown root is untrusted", () => {
+  const f = recorderFixture();
+  try {
+    // Note: no session_start for sx, so it has unknown root and file is treated as external
+    record({ ...f.base("sx"), kind: "ingest", toolName: "Read", sourceKind: "file", sourceId: join(f.proj, "README.md"), text: "Config option for deploys" }, f.deps);
+    appendFileSync(join(f.memoryDir, "MEMORY.md"), "- Support: help@acme.example\n");
+    record({ ...f.base("sx"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
+    const results = run(f);
+    // Should be EXPOSED since with unknown root, the file is treated as external (T4)
+    // and there's no word/indicator match between file ingest and the added line
+    const relevant = results.filter((c) => c.addedLines.some((l) => l.includes("help@acme.example")));
+    assert.ok(relevant.length > 0);
+    assert.equal(relevant[0]?.label, "EXPOSED");
   } finally {
     f.cleanup();
   }
