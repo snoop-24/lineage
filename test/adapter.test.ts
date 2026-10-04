@@ -64,6 +64,41 @@ test("tool events", () => {
   assert.equal(post("Glob", { pattern: "*" }), undefined);
 });
 
+test("robustness: non-object inputs", () => {
+  assert.deepEqual(toCommonEvents(null as unknown as Record<string, unknown>, NOW), []);
+  assert.deepEqual(toCommonEvents(undefined as unknown as Record<string, unknown>, NOW), []);
+  assert.deepEqual(toCommonEvents("x" as unknown as Record<string, unknown>, NOW), []);
+  assert.deepEqual(toCommonEvents([1, 2, 3] as unknown as Record<string, unknown>, NOW), []);
+});
+
+test("robustness: tool events with odd tool_input", () => {
+  const post = (tool_name: string, tool_input: unknown) =>
+    toCommonEvents({ ...base, hook_event_name: "PostToolUse", tool_name, tool_input, tool_response: "" }, NOW);
+  assert.deepEqual(post("Write", null), []);
+  assert.deepEqual(post("Bash", "curl x"), []);
+});
+
+test("extractText depth cutoff", () => {
+  // Build deeply nested object: 30 levels of { x: ... }
+  let nested: unknown = "text";
+  for (let i = 0; i < 30; i++) {
+    nested = { x: nested };
+  }
+  assert.equal(extractText(nested), "");
+
+  // Build 5 levels deep
+  let shallow: unknown = "text";
+  for (let i = 0; i < 5; i++) {
+    shallow = { x: shallow };
+  }
+  assert.equal(extractText(shallow), "text");
+});
+
+test("extractText maxChars cutoff", () => {
+  const result = extractText(["abc", "def"], 4);
+  assert.equal(result, "abc\n");
+});
+
 // Contract test against real captured payloads (Task 2). Skipped if none were captured.
 const FIXTURE_DIR = fileURLToPath(new URL("./fixtures/claude-code/", import.meta.url));
 const EXPECT: Record<string, string> = {

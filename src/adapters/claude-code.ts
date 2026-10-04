@@ -55,6 +55,7 @@ export function memoryDirFromTranscript(transcriptPath: string | null): string |
 }
 
 export function toCommonEvents(input: ClaudeHookInput, now: Date = new Date()): CommonEvent[] {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return [];
   const event = str(input.hook_event_name);
   const sessionId = str(input.session_id);
   const cwd = str(input.cwd);
