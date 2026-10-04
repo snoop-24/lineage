@@ -25,3 +25,16 @@ test("ignores non-network commands", () => {
 test("deduplicates", () => {
   assert.deepEqual(ids("curl https://a.example; curl https://a.example"), ["https://a.example"]);
 });
+
+test("detects fetches in substitutions, subshells, keywords and git -C", () => {
+  assert.deepEqual(ids("R=$(curl -s https://a.example/x)"), ["https://a.example/x"]);
+  assert.deepEqual(ids('echo "$(curl -s https://b.example/y)"'), ["https://b.example/y"]);
+  assert.deepEqual(ids("sleep 1 & curl https://c.example"), ["https://c.example"]);
+  assert.deepEqual(ids("(curl https://e.example)"), ["https://e.example"]);
+  assert.deepEqual(ids("if curl -s https://f.example; then echo ok; fi"), ["https://f.example"]);
+  assert.deepEqual(ids("env -i curl https://g.example"), ["https://g.example"]);
+  assert.deepEqual(ids("ls | xargs curl -O"), ["network:curl"]);
+  assert.deepEqual(ids("git -C /repo pull"), ["network:git pull"]);
+  assert.deepEqual(ids("git -C /repo clone https://github.com/x/y"), ["https://github.com/x/y"]);
+  assert.deepEqual(ids("git -C /repo status"), []);
+});
