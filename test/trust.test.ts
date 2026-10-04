@@ -1,0 +1,106 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { globToRegExp } from "../src/core/glob.ts";
+import {
+  addRule, classify, defaultTier, inferRule, loadTrust, parseTier, proposeTrust, removeRule, saveTrust,
+  type TrustConfig,
+} from "../src/core/trust.ts";
+import { tempDir } from "./helpers.ts";
+
+const root = "/p";
+const home = "/h";
+const none: TrustConfig = { rules: [] };
+
+test("globToRegExp", () => {
+  assert.ok(globToRegExp("/a/**").test("/a/b/c"));
+  assert.ok(globToRegExp("**/CLAUDE.md").test("CLAUDE.md"));
+  assert.ok(globToRegExp("**/CLAUDE.md").test("x/y/CLAUDE.md"));
+  assert.ok(globToRegExp("*.md").test("a.md"));
+  assert.ok(!globToRegExp("*.md").test("a/b.md"));
+  assert.ok(globToRegExp("file?.txt").test("file1.txt"));
+});
+
+test("default tiers", () => {
+  assert.equal(defaultTier("prompt", "x", root), "T0");
+  assert.equal(defaultTier("file", "/p/src/a.ts", root), "T1");
+  assert.equal(defaultTier("file", "/p/node_modules/x/README.md", root), "T3");
+  assert.equal(defaultTier("file", "/etc/hosts", root), "T4");
+  assert.equal(defaultTier("web", "https://a.example", root), "T4");
+  assert.equal(classify("web", "https://a.example", root, none, home), "T4");
+});
+
+test("rules: domain suffix, mcp server, path with ~", () => {
+  const cfg: TrustConfig = {
+    rules: [
+      { type: "domain", match: "python.org", tier: "T2" },
+      { type: "mcp_server", match: "github", tier: "T2" },
+      { type: "path", match: "~/notes/**", tier: "T2" },
+    ],
+  };
+  assert.equal(classify("web", "https://docs.python.org/3/", root, cfg, home), "T2");
+  assert.equal(classify("web", "https://evilpython.org/", root, cfg, home), "T4");
+  assert.equal(classify("mcp", "mcp:github/get_issue", root, cfg, home), "T2");
+  assert.equal(classify("mcp", "mcp:slack/read", root, cfg, home), "T4");
+  assert.equal(classify("file", "/h/notes/a.md", root, cfg, home), "T2");
+});
+
+test("personalization only tightens trusted defaults; most restrictive wins", () => {
+  const demote: TrustConfig = { rules: [{ type: "path", match: "/p/generated/**", tier: "T4" }] };
+  assert.equal(classify("file", "/p/generated/x.md", root, demote, home), "T4");
+  const promoteWorkspace: TrustConfig = { rules: [{ type: "path", match: "/p/**", tier: "T2" }] };
+  assert.equal(classify("file", "/p/src/a.ts", root, promoteWorkspace, home), "T1");
+  const conflict: TrustConfig = {
+    rules: [
+      { type: "domain", match: "example.com", tier: "T2" },
+      { type: "domain", match: "example.com", tier: "T4" },
+    ],
+  };
+  assert.equal(classify("web", "https://example.com/a", root, conflict, home), "T4");
+  assert.equal(classify("prompt", "anything", root, demote, home), "T0");
+});
+
+test("proposal: frequent untrusted sources across sessions only", () => {
+  const items = proposeTrust([
+    { sourceKind: "web", sourceId: "https://docs.python.org/3/a", sessionId: "s1", tier: "T4" },
+    { sourceKind: "web", sourceId: "https://docs.python.org/3/b", sessionId: "s1", tier: "T4" },
+    { sourceKind: "web", sourceId: "https://docs.python.org/3/c", sessionId: "s2", tier: "T4" },
+    { sourceKind: "web", sourceId: "https://rare.example/x", sessionId: "s1", tier: "T4" },
+    { sourceKind: "search", sourceId: "search:python", sessionId: "s1", tier: "T4" },
+    { sourceKind: "file", sourceId: "/p/node_modules/a/README.md", sessionId: "s1", tier: "T3" },
+  ]);
+  assert.deepEqual(items, [{ type: "domain", match: "docs.python.org", reads: 3, sessions: 2 }]);
+});
+
+test("rule editing, tier aliases, rule inference, load/save validation", () => {
+  let cfg = addRule(none, { type: "domain", match: "a.example", tier: "T2" });
+  cfg = addRule(cfg, { type: "domain", match: "a.example", tier: "T4" });
+  assert.deepEqual(cfg.rules, [{ type: "domain", match: "a.example", tier: "T4" }]);
+  const r = removeRule(cfg, "domain", "a.example");
+  assert.equal(r.removed, true);
+  assert.equal(r.cfg.rules.length, 0);
+  assert.equal(parseTier("trusted"), "T2");
+  assert.equal(parseTier("external"), "T4");
+  assert.equal(parseTier("T0"), null);
+  assert.deepEqual(inferRule("mcp:github"), { type: "mcp_server", match: "github" });
+  assert.deepEqual(inferRule("~/notes/**"), { type: "path", match: "~/notes/**" });
+  assert.deepEqual(inferRule("https://Docs.Python.org/3/"), { type: "domain", match: "docs.python.org" });
+  assert.deepEqual(inferRule("docs.python.org"), { type: "domain", match: "docs.python.org" });
+
+  const t = tempDir();
+  try {
+    const p = join(t.path, "trust.json");
+    assert.deepEqual(loadTrust(p), { rules: [] });
+    writeFileSync(p, JSON.stringify({ rules: [
+      { type: "domain", match: "a.example", tier: "T2" },
+      { type: "bogus", match: "x", tier: "T2" },
+      { type: "domain", match: "b.example", tier: "T0" },
+    ] }));
+    assert.deepEqual(loadTrust(p), { rules: [{ type: "domain", match: "a.example", tier: "T2" }] });
+    saveTrust(p, cfg);
+    assert.deepEqual(loadTrust(p), cfg);
+  } finally {
+    t.cleanup();
+  }
+});
