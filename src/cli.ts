@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { VERSION } from "./version.ts";
 import { hookCommand } from "./cli/hook.ts";
+import { reportCommand } from "./cli/report.ts";
 
 process.umask(0o077);
 
@@ -19,6 +20,7 @@ Usage:
 
 const commands: Record<string, Command> = {
   hook: hookCommand,
+  report: reportCommand,
 };
 
 async function main(argv: string[]): Promise<number> {
