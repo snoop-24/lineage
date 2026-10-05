@@ -1,12 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { record } from "../src/core/recorder.ts";
 import { loadTrust } from "../src/core/trust.ts";
-import { trustPath, ensureDataDir, type Env } from "../src/paths.ts";
+import { configPath, trustPath, ensureDataDir, type Env } from "../src/paths.ts";
 import { runTrust } from "../src/cli/trust.ts";
-import { runStatus } from "../src/cli/status.ts";
+import { hookCommandPaths, runStatus } from "../src/cli/status.ts";
 import { runLog } from "../src/cli/log.ts";
+import { addHooks } from "../src/claude-settings.ts";
+import { saveConfig, DEFAULT_CONFIG } from "../src/config.ts";
+import { buildHookCommand } from "../src/cli/install.ts";
 import { recorderFixture } from "./helpers.ts";
 
 const NOW = new Date("2026-10-03T00:00:00Z");
@@ -208,4 +212,44 @@ test("trust accept refuses to write when trust.json is invalid", () => {
   } finally {
     f.cleanup();
   }
+});
+
+function installFake(env: Env, nodePath: string, cliPath: string): void {
+  const command = buildHookCommand(nodePath, cliPath, { PVG_DATA_DIR: env.dataDir });
+  mkdirSync(dirname(env.claudeSettingsPath), { recursive: true });
+  writeFileSync(env.claudeSettingsPath, JSON.stringify(addHooks({}, command)));
+  saveConfig(configPath(env.dataDir), { ...DEFAULT_CONFIG, installedCommand: command });
+}
+
+test("F8: status warns when the hook command points to missing paths and when recording has gone quiet", () => {
+  const { f, env } = withData();
+  try {
+    installFake(env, join(f.home, "gone", "node"), join(f.home, "gone", "it's", "cli.js"));
+    const out = runStatus(env, new Date("2026-10-20T00:00:00Z")).out;
+    assert.match(out, /Hooks installed: yes/);
+    assert.match(out, /WARNING: hook command points to a missing Node or CLI path; re-run pvg init/);
+    assert.match(out, /WARNING: no events recorded in 17 days — is recording working\?/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("F8: no status warnings when hook paths exist and events are recent", () => {
+  const { f, env } = withData();
+  try {
+    installFake(env, process.execPath, join(process.cwd(), "src", "cli.ts"));
+    const out = runStatus(env, new Date("2026-10-05T00:00:00Z")).out;
+    assert.match(out, /Hooks installed: yes/);
+    assert.doesNotMatch(out, /WARNING/);
+    installFake(env, join(f.home, "gone", "node"), process.execPath);
+    assert.match(runStatus(env, new Date("2026-10-05T00:00:00Z")).out, /missing Node or CLI path/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("F8: hookCommandPaths parses quoted node and CLI paths", () => {
+  assert.deepEqual(hookCommandPaths(buildHookCommand("/n o/node", "/a'b/cli.js", { PVG_DATA_DIR: "/d x", PVG_HOME_DIR: "/h" })), { node: "/n o/node", cli: "/a'b/cli.js" });
+  assert.deepEqual(hookCommandPaths("'/usr/bin/node' --no-warnings '/x/cli.js' hook"), { node: "/usr/bin/node", cli: "/x/cli.js" });
+  assert.equal(hookCommandPaths("my-linter"), null);
 });
