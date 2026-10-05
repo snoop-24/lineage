@@ -204,3 +204,21 @@ test("invariant: truncated multibyte file sha matches re-read text", () => {
     t.cleanup();
   }
 });
+
+test("F4: instruction basenames are case-insensitive on darwin only", () => {
+  const { t, home, proj, ctx } = fixture();
+  try {
+    const darwin: SurfaceContext = { ...ctx, platform: "darwin" };
+    assert.equal(classifySurfacePath(join(proj, "claude.md"), darwin), "project");
+    assert.equal(classifySurfacePath(join(proj, "packages", "a", "Agents.md"), darwin), "project");
+    assert.equal(classifySurfacePath(join(proj, "claude.LOCAL.md"), darwin), "project");
+    assert.equal(classifySurfacePath(join(proj, ".claude", "skills", "x", "skill.md"), darwin), "project");
+    assert.equal(classifySurfacePath(join(home, ".claude", "claude.md"), darwin), "user");
+    assert.equal(classifySurfacePath(join(home, ".claude", "skills", "x", "Skill.md"), darwin), "user");
+    assert.equal(classifySurfacePath(join(proj, "notes.md"), darwin), null);
+    assert.equal(classifySurfacePath(join(proj, "claude.md"), ctx), null);
+    assert.equal(classifySurfacePath(join(home, ".claude", "claude.md"), ctx), null);
+  } finally {
+    t.cleanup();
+  }
+});

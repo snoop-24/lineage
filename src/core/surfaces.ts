@@ -35,6 +35,7 @@ export const PROJECT_FILES = [
 ];
 
 const INSTRUCTION_BASENAMES = new Set(["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md"]);
+const CASE_FOLDED_NAMES = ["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "SKILL.md"];
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "vendor", "target", ".next", "coverage"]);
 const IMPORT_RE = /(?:^|\s)@((?:~\/|\.{1,2}\/|\/)?[\w.-]+(?:\/[\w.-]+)*)/g;
 
@@ -49,8 +50,16 @@ export function managedClaudeMd(platform: NodeJS.Platform): string | null {
   return null;
 }
 
+// macOS file systems are case-insensitive by default: "claude.md" is loaded as CLAUDE.md.
+function canonicalInstructionName(p: string, platform: NodeJS.Platform): string {
+  if (platform !== "darwin") return p;
+  const lower = basename(p).toLowerCase();
+  const name = CASE_FOLDED_NAMES.find((n) => n.toLowerCase() === lower);
+  return name ? join(dirname(p), name) : p;
+}
+
 export function classifySurfacePath(filePath: string, ctx: SurfaceContext): SurfaceScope | null {
-  const p = resolve(filePath);
+  const p = canonicalInstructionName(resolve(filePath), ctx.platform);
   const claudeHome = join(ctx.home, ".claude");
   const projectsDir = join(claudeHome, "projects");
   if (ctx.memoryDir && isInside(p, ctx.memoryDir)) return "memory";

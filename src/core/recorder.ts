@@ -75,6 +75,8 @@ export function record(ev: CommonEvent, d: RecorderDeps): void {
     }
     case "ingest":
       recordIngest(ev, ev.toolName, ev.sourceKind, ev.sourceId, ev.text, d);
+      // MCP tools can write files no hook sees; rescan like the Bash path, attributed to the MCP source.
+      if (ev.sourceKind === "mcp") scanAndRecord(rescanTargets(ctx, d.store.listSurfaces()), ev, d, "in_session", ev.sourceId);
       return;
     case "file_write":
       recordFileWrite(ev, resolve(ev.filePath), ev.toolName, ctx, d);
@@ -195,6 +197,10 @@ function trackImports(fromPath: string, text: string, ev: CommonEvent, d: Record
     const cur = readSurface(imp, SNAPSHOT_CAP);
     if (!cur) continue;
     d.store.putBlob(cur.text, NO_CAP);
+    // Only called for in-session writes: a newly imported file is recorded before its row, like scanAndRecord.
+    d.store.insertEvent(
+      newEvent(ev, { kind: "scan_change", surfacePath: imp, blobSha: cur.sha, prevBlobSha: null, detail: { context: "in_session", change: "created", command: null } }),
+    );
     d.store.upsertSurface({ path: imp, scope: "import", projectRoot: ev.projectRoot, lastSha: cur.sha, lastSeenAt: ev.ts });
   }
 }
