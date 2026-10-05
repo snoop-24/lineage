@@ -1,3 +1,4 @@
+import { basename, dirname } from "node:path";
 import type { SourceKind, Tier } from "./events.ts";
 import type { Store } from "./store.ts";
 import { attributeChanges, LABEL_ORDER, type AttributedChange, type Label } from "./attribution.ts";
@@ -40,6 +41,7 @@ export interface ReportData {
     topSources: Array<{ source: string; reads: number }>;
   };
   changes: AttributedChange[];
+  settingsChanges: AttributedChange[];
   counts: Record<Label, number>;
   proposal: ProposalItem[];
   health: ReportHealth;
@@ -55,6 +57,17 @@ export interface BuildOptions {
 
 export function tilde(path: string, home: string): string {
   return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+}
+
+// .claude/settings.json and .claude/settings.local.json (project or ~/.claude) are configuration, not memory.
+export function isSettingsPath(path: string): boolean {
+  return (basename(path) === "settings.json" || basename(path) === "settings.local.json") && basename(dirname(path)) === ".claude";
+}
+
+// A settings change matters for pvg when it touches hooks or removes pvg's deny rule.
+export function settingsChangeFlagged(c: AttributedChange): boolean {
+  const touchesHooks = (l: string): boolean => l.includes('"hooks"') || l.includes('"disableAllHooks"');
+  return c.addedLines.some(touchesHooks) || c.removedLines.some((l) => touchesHooks(l) || l.includes("Edit("));
 }
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -92,7 +105,9 @@ export function buildReport(store: Store, trust: TrustConfig, o: BuildOptions): 
     const label = key ? (key.type === "mcp_server" ? `mcp:${key.match}` : key.match) : u.sourceKind;
     top.set(label, (top.get(label) ?? 0) + 1);
   }
-  const changes = attributeChanges(store, trust, { sinceIso: o.sinceIso, projectRoot: o.projectRoot, home: o.home });
+  const attributed = attributeChanges(store, trust, { sinceIso: o.sinceIso, projectRoot: o.projectRoot, home: o.home });
+  const changes = attributed.filter((c) => !isSettingsPath(c.event.surfacePath ?? ""));
+  const settingsChanges = attributed.filter((c) => isSettingsPath(c.event.surfacePath ?? "")).sort((a, b) => a.event.id - b.event.id);
   const counts = Object.fromEntries(LABEL_ORDER.map((l) => [l, 0])) as Record<Label, number>;
   for (const c of changes) counts[c.label] += 1;
   return {
@@ -109,23 +124,34 @@ export function buildReport(store: Store, trust: TrustConfig, o: BuildOptions): 
       topSources: [...top.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([source, reads]) => ({ source, reads })),
     },
     changes,
+    settingsChanges,
     counts,
     proposal: proposeTrust(ingests),
     health: o.health,
   };
 }
 
-function renderChange(c: AttributedChange, home: string): string[] {
-  const e = c.event;
-  const L: string[] = [`  [${LABEL_TITLES[c.label]}] ${safe(tilde(e.surfacePath ?? "?", home))}`];
+function sessionLine(e: AttributedChange["event"]): string {
   const via = e.kind === "write" ? `via ${safe(e.toolName ?? "tool")}` : `detected by scan (${safe(String(e.detail?.change ?? "changed"))})`;
-  L.push(`    session ${safe(e.sessionId ?? "?")} · ${when(e.ts)} · ${via}`);
-  const cmd = e.detail?.command;
-  if (typeof cmd === "string" && cmd.length > 0) L.push(`    command: ${safe(clip(cmd, 120))}`);
+  return `    session ${safe(e.sessionId ?? "?")} · ${when(e.ts)} · ${via}`;
+}
+
+function diffLines(c: AttributedChange): string[] {
+  const L: string[] = [];
   for (const line of c.addedLines.slice(0, 5)) L.push(`    + ${safe(clip(line, 160))}`);
   if (c.addedLines.length > 5) L.push(`    + … ${c.addedLines.length - 5} more line(s)`);
   for (const line of c.removedLines.slice(0, 5)) L.push(`    - ${safe(clip(line, 160))}`);
   if (c.removedLines.length > 5) L.push(`    - … ${c.removedLines.length - 5} more line(s)`);
+  return L;
+}
+
+function renderChange(c: AttributedChange, home: string): string[] {
+  const e = c.event;
+  const L: string[] = [`  [${LABEL_TITLES[c.label]}] ${safe(tilde(e.surfacePath ?? "?", home))}`];
+  L.push(sessionLine(e));
+  const cmd = e.detail?.command;
+  if (typeof cmd === "string" && cmd.length > 0) L.push(`    command: ${safe(clip(cmd, 120))}`);
+  L.push(...diffLines(c));
   for (const m of c.matches.slice(0, 5)) {
     const what = m.kind === "words" ? `shared text "${safe(clip(m.evidence, 80))}"` : `indicator ${safe(m.evidence)}`;
     L.push(`    evidence: ${what} in ${m.sourceKind} ${safe(clip(m.sourceId, 100))} (${m.secondsBefore}s earlier)`);
@@ -163,6 +189,13 @@ export function renderText(r: ReportData): string {
   for (const c of r.changes) {
     if (c.label !== "CLEAN") L.push("", ...renderChange(c, r.home));
   }
+  if (r.settingsChanges.length > 0) {
+    const flagged = r.settingsChanges.filter(settingsChangeFlagged).length;
+    L.push("", `SETTINGS CHANGES: ${r.settingsChanges.length} total, ${flagged} touching hooks or pvg's deny rule (marked !)`);
+    for (const c of r.settingsChanges) {
+      L.push("", `  ${settingsChangeFlagged(c) ? "! " : "  "}${safe(tilde(c.event.surfacePath ?? "?", r.home))}`, sessionLine(c.event), ...diffLines(c));
+    }
+  }
   L.push("", "PROPOSED TRUST RANKING");
   if (r.proposal.length === 0) {
     L.push("  No proposals yet (a source needs 3+ reads across 2+ sessions).");
@@ -184,6 +217,16 @@ export function reportJson(r: ReportData): string {
   return `${JSON.stringify(
     {
       ...r,
+      settingsChanges: r.settingsChanges.map((c) => ({
+        surfacePath: c.event.surfacePath,
+        sessionId: c.event.sessionId,
+        ts: c.event.ts,
+        kind: c.event.kind,
+        tool: c.event.toolName,
+        flagged: settingsChangeFlagged(c),
+        addedLines: c.addedLines,
+        removedLines: c.removedLines,
+      })),
       changes: r.changes.map((c) => ({
         label: c.label,
         surfacePath: c.event.surfacePath,

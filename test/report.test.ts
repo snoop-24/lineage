@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { record } from "../src/core/recorder.ts";
 import { buildReport, renderMarkdown, renderText, reportJson } from "../src/core/report.ts";
@@ -159,6 +159,44 @@ test("M5: removed lines are shown", () => {
     record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
     const text = renderText(buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") }));
     assert.match(text, /\[EXPOSED\][^\n]*MEMORY\.md\n(?:.*\n)*? {4}- - existing fact\n/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("F5: settings changes are reported separately and flagged only for hook or deny-rule edits", () => {
+  const f = recorderFixture();
+  try {
+    const userSettings = join(f.home, ".claude", "settings.json");
+    writeFileSync(userSettings, `{\n  "permissions": {\n    "deny": ["Edit(~/.pvg/**)"]\n  }\n}\n`);
+    populate(f);
+    const local = join(f.proj, ".claude", "settings.local.json");
+    const shared = join(f.proj, ".claude", "settings.json");
+    mkdirSync(join(f.proj, ".claude"), { recursive: true });
+    writeFileSync(local, `{\n  "permissions": {\n    "allow": ["Bash(npm test)"]\n  }\n}\n`);
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: local }, f.deps);
+    writeFileSync(shared, `{\n  "hooks": {}\n}\n`);
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: shared }, f.deps);
+    writeFileSync(userSettings, `{\n  "permissions": {\n  }\n}\n`);
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Edit", filePath: userSettings }, f.deps);
+    const r = buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") });
+    assert.equal(r.changes.length, 1);
+    assert.equal(r.counts.MATCHED, 1);
+    assert.deepEqual(r.settingsChanges.map((c) => c.event.surfacePath), [local, shared, userSettings]);
+    const text = renderText(r);
+    assert.match(text, /MEMORY CHANGES: 1 total\./);
+    const section = text.slice(text.indexOf("SETTINGS CHANGES"));
+    assert.ok(text.indexOf("SETTINGS CHANGES") > text.indexOf("MEMORY CHANGES"));
+    assert.match(section, /^SETTINGS CHANGES: 3 total/);
+    assert.ok(section.includes(`\n    ${local}\n    session s1 · `), section);
+    assert.ok(section.includes(`"allow": ["Bash(npm test)"]`), section);
+    assert.ok(section.includes(`\n  ! ${shared}\n`), section);
+    assert.ok(section.includes(`\n  ! ~/.claude/settings.json\n`), section);
+    assert.ok(section.includes(`    -     "deny": ["Edit(~/.pvg/**)"]`), section);
+    assert.doesNotMatch(text.slice(0, text.indexOf("SETTINGS CHANGES")), /settings(\.local)?\.json/);
+    const json = JSON.parse(reportJson(r)) as { changes: unknown[]; settingsChanges: Array<{ surfacePath: string; flagged: boolean }> };
+    assert.equal(json.changes.length, 1);
+    assert.deepEqual(json.settingsChanges.map((c) => [c.surfacePath, c.flagged]), [[local, false], [shared, true], [userSettings, true]]);
   } finally {
     f.cleanup();
   }
