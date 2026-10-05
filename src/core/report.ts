@@ -2,6 +2,7 @@ import type { SourceKind, Tier } from "./events.ts";
 import type { Store } from "./store.ts";
 import { attributeChanges, LABEL_ORDER, type AttributedChange, type Label } from "./attribution.ts";
 import { classify, isUntrusted, proposalKey, proposeTrust, type ProposalItem, type TrustConfig } from "./trust.ts";
+import { safe } from "./sanitize.ts";
 
 export const LABEL_TITLES: Record<Label, string> = {
   MATCHED: "MATCHED",
@@ -116,32 +117,32 @@ export function buildReport(store: Store, trust: TrustConfig, o: BuildOptions): 
 
 function renderChange(c: AttributedChange, home: string): string[] {
   const e = c.event;
-  const L: string[] = [`  [${LABEL_TITLES[c.label]}] ${tilde(e.surfacePath ?? "?", home)}`];
-  const via = e.kind === "write" ? `via ${e.toolName ?? "tool"}` : `detected by scan (${String(e.detail?.change ?? "changed")})`;
-  L.push(`    session ${e.sessionId ?? "?"} · ${when(e.ts)} · ${via}`);
+  const L: string[] = [`  [${LABEL_TITLES[c.label]}] ${safe(tilde(e.surfacePath ?? "?", home))}`];
+  const via = e.kind === "write" ? `via ${safe(e.toolName ?? "tool")}` : `detected by scan (${safe(String(e.detail?.change ?? "changed"))})`;
+  L.push(`    session ${safe(e.sessionId ?? "?")} · ${when(e.ts)} · ${via}`);
   const cmd = e.detail?.command;
-  if (typeof cmd === "string" && cmd.length > 0) L.push(`    command: ${clip(cmd, 120)}`);
-  for (const line of c.addedLines.slice(0, 5)) L.push(`    + ${clip(line, 160)}`);
+  if (typeof cmd === "string" && cmd.length > 0) L.push(`    command: ${safe(clip(cmd, 120))}`);
+  for (const line of c.addedLines.slice(0, 5)) L.push(`    + ${safe(clip(line, 160))}`);
   if (c.addedLines.length > 5) L.push(`    + … ${c.addedLines.length - 5} more line(s)`);
   for (const m of c.matches.slice(0, 5)) {
-    const what = m.kind === "words" ? `shared text "${clip(m.evidence, 80)}"` : `indicator ${m.evidence}`;
-    L.push(`    evidence: ${what} in ${m.sourceKind} ${clip(m.sourceId, 100)} (${m.secondsBefore}s earlier)`);
+    const what = m.kind === "words" ? `shared text "${safe(clip(m.evidence, 80))}"` : `indicator ${safe(m.evidence)}`;
+    L.push(`    evidence: ${what} in ${m.sourceKind} ${safe(clip(m.sourceId, 100))} (${m.secondsBefore}s earlier)`);
   }
   if (c.matches.length === 0 && c.untrustedSources.length > 0) {
-    L.push(`    untrusted content earlier in session: ${c.untrustedSources.slice(0, 3).map((s) => `${s.sourceKind} ${clip(s.sourceId, 80)}`).join("; ")}`);
+    L.push(`    untrusted content earlier in session: ${c.untrustedSources.slice(0, 3).map((s) => `${s.sourceKind} ${safe(clip(s.sourceId, 80))}`).join("; ")}`);
   }
   if (c.evidencePruned) L.push("    note: some untrusted content from this session has expired (30-day retention); the label may understate the match");
   if (c.blastRadius) {
     const n = c.blastRadius.sessions.length;
     const list = n > 0 ? ` (${c.blastRadius.sessions.slice(0, 5).join(", ")})` : "";
-    L.push(`    blast radius: ${c.blastRadius.estimated ? "up to " : ""}${n} later session(s)${list}${c.blastRadius.estimated ? " (estimated: no load events recorded for this file)" : ""}`);
+    L.push(`    blast radius: ${c.blastRadius.estimated ? "up to " : ""}${n} later session(s)${safe(list)}${c.blastRadius.estimated ? " (estimated: no load events recorded for this file)" : ""}`);
   }
   return L;
 }
 
 export function renderText(r: ReportData): string {
   const L: string[] = [];
-  const scope = r.projectRoot ? ` (project ${tilde(r.projectRoot, r.home)})` : "";
+  const scope = r.projectRoot ? ` (project ${safe(tilde(r.projectRoot, r.home))})` : "";
   L.push(`Provenance report: since ${when(r.sinceIso)}, ${r.sessions} session(s) in ${r.projects} project(s)${scope}`);
   const warnings: string[] = [];
   if (!r.health.hooksInstalled) warnings.push("pvg hooks are not installed in Claude Code settings. Run: pvg init");
@@ -155,7 +156,7 @@ export function renderText(r: ReportData): string {
   L.push("", "EXPOSURE", `  Ingestions: ${r.exposure.total} total, ${r.exposure.untrusted} untrusted`);
   const kinds = Object.entries(r.exposure.untrustedByKind).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ");
   if (kinds) L.push(`  Untrusted by kind: ${kinds}`);
-  if (r.exposure.topSources.length > 0) L.push(`  Top untrusted sources: ${r.exposure.topSources.map((s) => `${s.source} (${s.reads})`).join(", ")}`);
+  if (r.exposure.topSources.length > 0) L.push(`  Top untrusted sources: ${r.exposure.topSources.map((s) => `${safe(s.source)} (${s.reads})`).join(", ")}`);
   L.push("", `MEMORY CHANGES: ${r.changes.length} total. ${LABEL_ORDER.map((l) => `${LABEL_TITLES[l]} ${r.counts[l]}`).join(", ")}`);
   for (const c of r.changes) {
     if (c.label !== "CLEAN") L.push("", ...renderChange(c, r.home));
@@ -164,14 +165,17 @@ export function renderText(r: ReportData): string {
   if (r.proposal.length === 0) {
     L.push("  No proposals yet (a source needs 3+ reads across 2+ sessions).");
   } else {
-    const items = r.proposal.map((p) => `${p.type === "mcp_server" ? `mcp:${p.match}` : p.match} (${p.reads} reads, ${p.sessions} sessions)`);
+    const items = r.proposal.map((p) => `${safe(p.type === "mcp_server" ? `mcp:${p.match}` : p.match)} (${p.reads} reads, ${p.sessions} sessions)`);
     L.push(`  Promote to trusted? ${items.join("; ")}`, "  Run: pvg trust accept");
   }
   return `${L.join("\n")}\n`;
 }
 
 export function renderMarkdown(r: ReportData): string {
-  return `# Provenance report\n\n\`\`\`text\n${renderText(r)}\`\`\`\n`;
+  const text = renderText(r);
+  const longestRun = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `# Provenance report\n\n${fence}text\n${text}${fence}\n`;
 }
 
 export function reportJson(r: ReportData): string {

@@ -75,6 +75,18 @@ test("log filters and validates", () => {
   }
 });
 
+test("F1: log escapes control characters in source ids", () => {
+  const { f, env } = withData();
+  try {
+    record({ ...f.base("s1"), kind: "ingest", toolName: "WebFetch", sourceKind: "web", sourceId: "https://evil.example/\x1b[2J\x9b", text: "x" }, f.deps);
+    const out = runLog(["--kind", "ingest", "--limit", "1"], env).out;
+    assert.ok(out.includes("https://evil.example/\\x1b[2J\\x9b"), out);
+    assert.doesNotMatch(out, /[\x1b\x9b]/);
+  } finally {
+    f.cleanup();
+  }
+});
+
 test("ruling 1: proposals skip sources with existing rules", () => {
   const { f, env } = withData();
   try {

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { STORED_KINDS, type StoredKind } from "../core/events.ts";
 import { Store } from "../core/store.ts";
+import { safe } from "../core/sanitize.ts";
 import { dbPath, resolveEnv, type Env } from "../paths.ts";
 import { emit, ok, usage, type CmdResult } from "./result.ts";
 
@@ -33,7 +34,7 @@ export function runLog(args: string[], env: Env): CmdResult {
       .listEvents({ sessionId: parsed.values.session, kind: kind as StoredKind | undefined, limit, order: "desc" })
       .reverse();
     if (rows.length === 0) return ok(["No matching events."]);
-    return ok(rows.map((e) => `#${e.id} ${e.ts} ${e.kind} ${e.toolName ?? "-"} ${e.surfacePath ?? e.sourceId ?? ""}`.trimEnd()));
+    return ok(rows.map((e) => safe(`#${e.id} ${e.ts} ${e.kind} ${e.toolName ?? "-"} ${e.surfacePath ?? e.sourceId ?? ""}`.trimEnd())));
   } finally {
     store.close();
   }

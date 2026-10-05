@@ -114,3 +114,38 @@ test("evidencePruned flag when untrusted content expires", () => {
     f.cleanup();
   }
 });
+
+test("F1: control characters in memory lines, commands and source ids are escaped", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    record({ ...f.base("s1"), kind: "ingest", toolName: "WebFetch", sourceKind: "web", sourceId: "https://evil.example/\x1b]52;c;ZXZpbA==\x07", text: "unrelated page" }, f.deps);
+    appendFileSync(join(f.memoryDir, "MEMORY.md"), "\x1b[8mhidden\n");
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
+    const r = buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") });
+    const text = renderText(r);
+    assert.ok(text.includes("+ \\x1b[8mhidden"), text);
+    assert.ok(text.includes("https://evil.example/\\x1b]52;c;ZXZpbA==\\x07"), text);
+    assert.doesNotMatch(text, /[\x00-\x08\x0b-\x1f\x7f-\x9f]/);
+    assert.doesNotMatch(renderMarkdown(r), /[\x00-\x08\x0b-\x1f\x7f-\x9f]/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("F1: renderMarkdown fence is longer than any backtick run in the content", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    record({ ...f.base("s1"), kind: "ingest", toolName: "WebFetch", sourceKind: "web", sourceId: "https://x.example/a", text: "page" }, f.deps);
+    appendFileSync(join(f.memoryDir, "MEMORY.md"), "````\nescape the fence\n```\n");
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
+    const r = buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") });
+    const md = renderMarkdown(r);
+    assert.ok(md.startsWith("# Provenance report\n\n`````text\n"), md);
+    assert.ok(md.endsWith("\n`````\n"), md);
+    assert.equal(renderMarkdown(buildReport(f.store, f.deps.trust, { sinceIso: "2030-01-01T00:00:00.000Z", projectRoot: null, home: f.home, health: HEALTH, now: new Date() })).split("\n")[2], "```text");
+  } finally {
+    f.cleanup();
+  }
+});
