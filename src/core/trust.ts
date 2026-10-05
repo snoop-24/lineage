@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import type { SourceKind, Tier } from "./events.ts";
 import { globToRegExp } from "./glob.ts";
 
@@ -72,9 +72,22 @@ export function mcpServer(sourceId: string): string | null {
   return server ? server : null;
 }
 
+const AGENT_FILE_BASENAMES = new Set(["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "SKILL.md"]);
+
+// The agent's own memory/instruction files: their writes are attributed when they happen, so reading them is trusted.
+function isAgentMemoryFile(path: string): boolean {
+  return (
+    AGENT_FILE_BASENAMES.has(basename(path)) ||
+    path.includes("/.claude/rules/") ||
+    path.includes("/.claude/skills/") ||
+    /\/\.claude\/projects\/[^/]+\/memory\//.test(path)
+  ); // ~/.claude/CLAUDE.md is covered by the basename check.
+}
+
 export function defaultTier(kind: SourceKind | "prompt", sourceId: string, projectRoot: string): Tier {
   if (kind === "prompt") return "T0";
   if (kind === "file") {
+    if (isAgentMemoryFile(sourceId)) return "T1";
     const rel = relative(projectRoot, sourceId);
     const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
     if (!inside) return "T4";

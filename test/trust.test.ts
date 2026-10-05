@@ -153,3 +153,19 @@ test("inferRule extracts correct server and domain segments", () => {
   assert.deepEqual(inferRule("https://Docs.Python.org/3/"), { type: "domain", match: "docs.python.org" });
   assert.deepEqual(inferRule("docs.python.org"), { type: "domain", match: "docs.python.org" });
 });
+
+test("F6: agent memory/instruction files read anywhere default to T1; other outside files stay T4", () => {
+  assert.equal(defaultTier("file", "/h/.claude/projects/p/memory/topic.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/elsewhere/AGENTS.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/elsewhere/CLAUDE.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/elsewhere/CLAUDE.local.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/skills/deploy/SKILL.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/skills/deploy/helper.sh", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/rules/style.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/CLAUDE.md", "/proj"), "T1");
+  assert.equal(defaultTier("file", "/elsewhere/README.md", "/proj"), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/projects/p/transcript.jsonl", "/proj"), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/settings.json", "/proj"), "T4");
+  const demote: TrustConfig = { rules: [{ type: "path", match: "/elsewhere/**", tier: "T4" }] };
+  assert.equal(classify("file", "/elsewhere/AGENTS.md", "/proj", demote, home), "T4");
+});
