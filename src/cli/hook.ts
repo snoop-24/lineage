@@ -16,11 +16,36 @@ export function logError(dataDir: string, err: unknown): void {
   }
 }
 
+const ADAPTER_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit", "Read", "WebFetch", "WebSearch", "Bash"]);
+
+function isAdapterTool(name: unknown): name is string {
+  return typeof name === "string" && (ADAPTER_TOOLS.has(name) || name.startsWith("mcp__"));
+}
+
+// A PostToolUse for a tool the adapter handles that yields no event means the payload shape changed.
+// Log field names only, never values.
+function unrecognizedPayload(input: ClaudeHookInput): string | null {
+  if (input === null || typeof input !== "object" || input.hook_event_name !== "PostToolUse" || !isAdapterTool(input.tool_name)) return null;
+  const ti = input.tool_input;
+  const keys = ti !== null && typeof ti === "object" && !Array.isArray(ti) ? Object.keys(ti).join(",") : "";
+  return `unrecognized PostToolUse payload: tool=${input.tool_name} tool_input keys=${keys}`;
+}
+
 export function handleHookInput(stdinText: string, env: Env, now: Date = new Date()): void {
   try {
-    const input = JSON.parse(stdinText) as ClaudeHookInput;
+    let input: ClaudeHookInput;
+    try {
+      input = JSON.parse(stdinText) as ClaudeHookInput;
+    } catch {
+      logError(env.dataDir, `SyntaxError: invalid hook JSON (${Buffer.byteLength(stdinText, "utf8")} bytes)`);
+      return;
+    }
     const events = toCommonEvents(input, now);
-    if (events.length === 0) return;
+    if (events.length === 0) {
+      const unrecognized = unrecognizedPayload(input);
+      if (unrecognized) logError(env.dataDir, unrecognized);
+      return;
+    }
     ensureDataDir(env.dataDir);
     const cfg = loadConfig(configPath(env.dataDir));
     const store = Store.open(env.dataDir);

@@ -79,3 +79,45 @@ test("CLI hook exits 0 and prints nothing, even on garbage", () => {
     t.cleanup();
   }
 });
+
+test("F3: unrecognized PostToolUse payload for a handled tool logs field names only", () => {
+  const t = tempDir();
+  try {
+    const e = env(t.path);
+    handleHookInput(
+      JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s1", cwd: t.path, tool_name: "WebFetch", tool_input: { href: "x" }, tool_response: "secret-page-body" }),
+      e,
+    );
+    const log = readFileSync(join(e.dataDir, "errors.log"), "utf8");
+    assert.equal(log.trim().split("\n").length, 1);
+    assert.match(log, /unrecognized PostToolUse payload: tool=WebFetch tool_input keys=href\n$/);
+    assert.doesNotMatch(log, /"x"|=x\b|secret-page-body/);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("F3: unhandled tools and recognized payloads write no error line", () => {
+  const t = tempDir();
+  try {
+    const e = env(t.path);
+    handleHookInput(JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s1", cwd: t.path, tool_name: "TodoWrite", tool_input: { todos: [] } }), e);
+    handleHookInput(JSON.stringify({ hook_event_name: "PostToolUse", session_id: "s1", cwd: t.path, tool_name: "WebFetch", tool_input: { url: "https://a.example/" }, tool_response: "ok" }), e);
+    assert.equal(existsSync(join(e.dataDir, "errors.log")), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("M2: invalid hook JSON logs its size, never its content", () => {
+  const t = tempDir();
+  try {
+    const e = env(t.path);
+    handleHookInput("secret-token-123{", e);
+    const log = readFileSync(join(e.dataDir, "errors.log"), "utf8");
+    assert.match(log, /SyntaxError: invalid hook JSON \(17 bytes\)/);
+    assert.doesNotMatch(log, /secret-token-123/);
+  } finally {
+    t.cleanup();
+  }
+});
