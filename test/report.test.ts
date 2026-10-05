@@ -38,8 +38,10 @@ test("buildReport + renderers", () => {
     assert.match(text, /indicator email:ops@acme-backup\.com in web https:\/\/acme-status\.example\/incident/);
     assert.match(text, /Promote to trusted\? docs\.python\.org \(3 reads, 2 sessions\)/);
     assert.match(renderMarkdown(r), /^# Provenance report/);
-    const json = JSON.parse(reportJson(r)) as { changes: Array<{ label: string }> };
+    assert.doesNotMatch(text, /expired \(30-day retention\)/);
+    const json = JSON.parse(reportJson(r)) as { changes: Array<{ label: string; evidencePruned: boolean }> };
     assert.equal(json.changes[0]?.label, "MATCHED");
+    assert.equal(json.changes[0]?.evidencePruned, false);
   } finally {
     f.cleanup();
   }
@@ -101,6 +103,13 @@ test("evidencePruned flag when untrusted content expires", () => {
     assert.match(text, /expired \(30-day retention\)/);
     const json = JSON.parse(reportJson(r)) as { changes: Array<{ evidencePruned: boolean }> };
     assert.equal(json.changes[0]?.evidencePruned, true);
+    // Verify note placement: between [EXPOSED] header and "blast radius"
+    const headerIdx = text.indexOf("[EXPOSED]");
+    const noteIdx = text.indexOf("expired (30-day retention)");
+    const blastIdx = text.indexOf("blast radius:");
+    assert.ok(headerIdx >= 0, "Should find [EXPOSED] header");
+    assert.ok(noteIdx > headerIdx, "Note should appear after header");
+    assert.ok(blastIdx > noteIdx, "Note should appear before blast radius");
   } finally {
     f.cleanup();
   }
