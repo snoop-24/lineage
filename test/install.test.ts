@@ -224,3 +224,99 @@ test("purge refuses dangerous paths", () => {
     t.cleanup();
   }
 });
+
+test("fallback + purge: removes hooks and deletes data dir", () => {
+  const { t, env } = setup();
+  try {
+    // Init normally
+    runInit(env, opts());
+    assert.ok(hooksInstalled(readSettings(env.claudeSettingsPath), CMD));
+
+    // Delete config.json only (simulate lost config)
+    rmSync(env.dataDir, { recursive: true, force: true });
+    assert.equal(existsSync(env.dataDir), false);
+
+    // Uninstall with purge should remove hooks by pattern and delete data dir
+    const r = runUninstall(env, { purge: true, now: NOW });
+    assert.equal(r.removed, true);
+    assert.equal(r.purged, true);  // Must be true (this was the regression)
+    assert.match(r.message, /Removed.*hook.*found by pattern/);
+
+    // Data dir must be gone
+    assert.equal(existsSync(env.dataDir), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("refused purge leaves settings untouched", () => {
+  const { t, env } = setup();
+  try {
+    // Init with protect-data
+    runInit(env, opts({ protectData: true }));
+    const settingsAfterInit = readSettings(env.claudeSettingsPath);
+    assert.ok(hooksInstalled(settingsAfterInit, CMD));
+
+    // Try to purge with dangerous dataDir (equals home)
+    const dangerousEnv: typeof env = { ...env, dataDir: env.home };
+    assert.throws(
+      () => runUninstall(dangerousEnv, { purge: true, now: NOW }),
+      /refusing to purge/
+    );
+
+    // Settings should be completely untouched
+    const settingsAfterRefused = readSettings(env.claudeSettingsPath);
+    assert.deepEqual(settingsAfterRefused, settingsAfterInit);
+    assert.ok(hooksInstalled(settingsAfterRefused, CMD));
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("user's pre-existing deny rules survive protect-data logic", () => {
+  const { t, env } = setup();
+  try {
+    // Start with user's own deny rule (not the pvg rule)
+    writeFileSync(env.claudeSettingsPath, JSON.stringify({
+      model: "opus",
+      hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "my-linter" }] }] },
+      permissions: { deny: ["Edit(~/.pvg/**)"] }
+    }) + "\n");
+
+    // Init with protect-data: should detect rule already exists
+    runInit(env, opts({ protectData: true }));
+    const cfg1 = loadConfig(configPath(env.dataDir));
+    assert.equal(cfg1.protectDataAdded, false);
+
+    // Uninstall: the rule should stay (because we didn't add it)
+    runUninstall(env, { purge: false, now: NOW });
+    const s = readSettings(env.claudeSettingsPath);
+    assert.ok(s.permissions?.deny?.includes("Edit(~/.pvg/**)"));
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("user's pre-existing empty permissions object survives", () => {
+  const { t, env } = setup();
+  try {
+    // Start with empty permissions object
+    writeFileSync(env.claudeSettingsPath, JSON.stringify({
+      model: "opus",
+      hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "my-linter" }] }] },
+      permissions: {}
+    }) + "\n");
+
+    // Init without protect-data
+    runInit(env, opts({ protectData: false }));
+
+    // Uninstall
+    runUninstall(env, { purge: false, now: NOW });
+    const s = readSettings(env.claudeSettingsPath);
+
+    // Empty permissions should survive
+    assert.deepEqual(s.permissions, {});
+  } finally {
+    t.cleanup();
+  }
+});

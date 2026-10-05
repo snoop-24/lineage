@@ -46,6 +46,15 @@ export function pvgEnvVars(processEnv: NodeJS.ProcessEnv): Record<string, string
 
 export const PVG_HOOK_PATTERN = /--no-warnings '[^']*\/cli\.(?:js|ts)' hook$/;
 
+function cleanupEmptyPermissions(s: { permissions?: { deny?: string[]; [k: string]: unknown }; [k: string]: unknown }): void {
+  if (s.permissions?.deny?.length === 0) {
+    delete s.permissions.deny;
+  }
+  if (s.permissions && Object.keys(s.permissions).length === 0) {
+    delete s.permissions;
+  }
+}
+
 export interface InitOptions {
   dryRun: boolean;
   protectData: boolean;
@@ -110,10 +119,19 @@ export interface UninstallResult {
 }
 
 export function runUninstall(env: Env, o: { purge: boolean; now: Date }): UninstallResult {
+  // SAFETY CHECK FIRST: if purging, validate the path before any writes
+  if (o.purge) {
+    const resolved = resolve(env.dataDir);
+    if (resolved === resolve(env.home) || resolved === "/") {
+      throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory`);
+    }
+  }
+
   const cfg = loadConfig(configPath(env.dataDir));
   let backupPath: string | null = null;
   let removed = false;
-  let settings = readSettings(env.claudeSettingsPath);
+  let denyRuleWasRemoved = false;
+  const settings = readSettings(env.claudeSettingsPath);
 
   if (cfg.installedCommand) {
     // Remove hooks by installed command
@@ -122,14 +140,12 @@ export function runUninstall(env: Env, o: { purge: boolean; now: Date }): Uninst
     // Remove deny rule only if we added it
     if (cfg.protectDataAdded) {
       next = removeDenyRule(next, denyRuleFor(env));
+      denyRuleWasRemoved = true;
     }
 
-    // Clean up empty permissions objects
-    if (next.permissions?.deny?.length === 0) {
-      delete next.permissions.deny;
-    }
-    if (next.permissions && Object.keys(next.permissions).length === 0) {
-      delete next.permissions;
+    // Clean up empty permissions only if we removed the deny rule
+    if (denyRuleWasRemoved) {
+      cleanupEmptyPermissions(next);
     }
 
     backupPath = writeSettingsWithBackup(env.claudeSettingsPath, next, o.now);
@@ -154,40 +170,47 @@ export function runUninstall(env: Env, o: { purge: boolean; now: Date }): Uninst
         next = removeHooks(next, cmd);
       }
 
-      // Clean up empty permissions objects
-      if (next.permissions?.deny?.length === 0) {
-        delete next.permissions.deny;
-      }
-      if (next.permissions && Object.keys(next.permissions).length === 0) {
-        delete next.permissions;
-      }
-
+      // No cleanup of permissions here; we didn't add any deny rules in this path
       backupPath = writeSettingsWithBackup(env.claudeSettingsPath, next, o.now);
       removed = true;
-      const suffix = commands.size === 1 ? "y" : "ies";
-      return {
-        removed,
-        backupPath,
-        purged: false,
-        message: `Removed ${commands.size} pvg hook entr${suffix} found by pattern (pvg config was missing).`,
-      };
     }
   }
 
+  // Purge always runs after either path (if removal happened or not)
+  let purged = false;
   if (o.purge) {
-    // Safety check: refuse to purge dangerous paths
-    const resolved = resolve(env.dataDir);
-    if (resolved === resolve(env.home) || resolved === "/") {
-      throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory`);
-    }
     rmSync(env.dataDir, { recursive: true, force: true });
+    purged = true;
+  }
+
+  // Determine message based on what happened
+  let message: string;
+  if (removed) {
+    if (cfg.installedCommand) {
+      message = "Removed pvg hooks from Claude Code settings.";
+    } else {
+      const commands = new Set<string>();
+      for (const groups of Object.values(settings.hooks ?? {})) {
+        for (const g of groups) {
+          for (const h of g.hooks ?? []) {
+            if (h.type === "command" && h.command && PVG_HOOK_PATTERN.test(h.command)) {
+              commands.add(h.command);
+            }
+          }
+        }
+      }
+      const suffix = commands.size === 1 ? "y" : "ies";
+      message = `Removed ${commands.size} pvg hook entr${suffix} found by pattern (pvg config was missing).`;
+    }
+  } else {
+    message = "pvg hooks were not installed.";
   }
 
   return {
     removed,
     backupPath,
-    purged: o.purge,
-    message: removed ? "Removed pvg hooks from Claude Code settings." : "pvg hooks were not installed.",
+    purged,
+    message,
   };
 }
 
