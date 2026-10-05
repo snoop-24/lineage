@@ -68,6 +68,7 @@ test("poisoning, script write, clean write, and hand edit are labeled correctly"
     try {
       assert.equal(store.verifyChain().ok, true);
       const changes = attributeChanges(store, { rules: [] }, { sinceIso: "2026-01-01T00:00:00.000Z", projectRoot: null, home });
+      assert.equal(changes.length, 4);
       const bySession = new Map(changes.map((c) => [c.event.sessionId, c]));
       const s1 = bySession.get("s1");
       assert.equal(s1?.label, "MATCHED");
