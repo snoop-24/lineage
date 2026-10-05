@@ -175,7 +175,8 @@ export class Store {
 
   static open(dataDir: string): Store {
     const db = new DatabaseSync(dbPath(dataDir));
-    db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+    // busy_timeout first: switching to WAL needs a lock, and a concurrent first open must wait for it, not fail.
+    db.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;");
     db.exec(SCHEMA);
     return new Store(db);
   }
