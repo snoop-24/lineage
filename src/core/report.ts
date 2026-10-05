@@ -1,7 +1,7 @@
 import { basename, dirname } from "node:path";
 import type { SourceKind, Tier } from "./events.ts";
 import type { Store } from "./store.ts";
-import { attributeChanges, LABEL_ORDER, type AttributedChange, type Label } from "./attribution.ts";
+import { attributeChanges, LABEL_ORDER, UNKNOWN_ROOT, type AttributedChange, type Label } from "./attribution.ts";
 import { classify, isUntrusted, proposalKey, proposeTrust, type ProposalItem, type TrustConfig } from "./trust.ts";
 import { safe } from "./sanitize.ts";
 
@@ -88,7 +88,7 @@ export function classifiedIngests(
     if (!e.sessionId || !e.sourceKind || !e.sourceId) continue;
     const root = rootOf(e.sessionId);
     if (o.projectRoot && root !== o.projectRoot) continue;
-    out.push({ sourceKind: e.sourceKind, sourceId: e.sourceId, sessionId: e.sessionId, tier: classify(e.sourceKind, e.sourceId, root ?? "", trust, o.home) });
+    out.push({ sourceKind: e.sourceKind, sourceId: e.sourceId, sessionId: e.sessionId, tier: classify(e.sourceKind, e.sourceId, root ?? UNKNOWN_ROOT, trust, o.home) });
   }
   return out;
 }

@@ -56,7 +56,8 @@ interface Cache {
   loadsFor: Map<string, EventRow[]>;
 }
 
-const UNKNOWN_ROOT = "/\u0000pvg-unknown-root";
+// Sentinel root for sessions with no recorded project: file sources classify as outside-project, never as cwd-relative.
+export const UNKNOWN_ROOT = "/\u0000pvg-unknown-root";
 
 function multisetDiff(from: string[], against: string[]): string[] {
   const budget = new Map<string, number>();

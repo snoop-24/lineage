@@ -201,3 +201,16 @@ test("F5: settings changes are reported separately and flagged only for hook or 
     f.cleanup();
   }
 });
+
+test("M3: a file ingest whose session has no recorded start counts as untrusted", () => {
+  const f = recorderFixture();
+  try {
+    const underCwd = join(process.cwd(), "src", "core", "report.ts");
+    record({ ...f.base("orphan"), kind: "ingest", toolName: "Read", sourceKind: "file", sourceId: underCwd, text: "code" }, f.deps);
+    const r = buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") });
+    assert.equal(r.exposure.total, 1);
+    assert.equal(r.exposure.untrusted, 1);
+  } finally {
+    f.cleanup();
+  }
+});
