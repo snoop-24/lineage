@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { record } from "../src/core/recorder.ts";
 import { loadTrust } from "../src/core/trust.ts";
 import { trustPath, ensureDataDir, type Env } from "../src/paths.ts";
@@ -94,17 +94,105 @@ test("ruling 1: proposals skip sources with existing rules", () => {
   }
 });
 
-test("ruling 2: status warns when trust.json is invalid", () => {
+test("ruling 2: status warns when trust.json is malformed JSON", () => {
   const { f, env } = withData();
   try {
-    // Write invalid JSON to trust.json
     ensureDataDir(env.dataDir);
     const trustJsonPath = trustPath(env.dataDir);
     writeFileSync(trustJsonPath, "{oops", { mode: 0o600 });
 
-    // Status should warn about the invalid JSON
     const status = runStatus(env).out;
     assert.match(status, /trust\.json is not valid JSON/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("ruling 2: status warns when trust.json is null", () => {
+  const { f, env } = withData();
+  try {
+    ensureDataDir(env.dataDir);
+    const trustJsonPath = trustPath(env.dataDir);
+    writeFileSync(trustJsonPath, "null", { mode: 0o600 });
+
+    const status = runStatus(env).out;
+    assert.match(status, /trust\.json is not valid JSON/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("ruling 2: status warns when trust.json is a number", () => {
+  const { f, env } = withData();
+  try {
+    ensureDataDir(env.dataDir);
+    const trustJsonPath = trustPath(env.dataDir);
+    writeFileSync(trustJsonPath, "42", { mode: 0o600 });
+
+    const status = runStatus(env).out;
+    assert.match(status, /trust\.json is not valid JSON/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("ruling 2: status has no Trust rules line when trust.json doesn't exist", () => {
+  const { f, env } = withData();
+  try {
+    const status = runStatus(env).out;
+    assert(!status.includes("Trust rules:"), "should not have Trust rules line when no trust.json");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("ruling 2: status doesn't warn with valid trust.json", () => {
+  const { f, env } = withData();
+  try {
+    ensureDataDir(env.dataDir);
+    const trustJsonPath = trustPath(env.dataDir);
+    writeFileSync(trustJsonPath, JSON.stringify({ rules: [] }), { mode: 0o600 });
+
+    const status = runStatus(env).out;
+    assert(!status.includes("WARNING"), "should not warn with valid trust.json");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("trust add refuses to write when trust.json is invalid", () => {
+  const { f, env } = withData();
+  try {
+    ensureDataDir(env.dataDir);
+    const trustJsonPath = trustPath(env.dataDir);
+    writeFileSync(trustJsonPath, "{oops", { mode: 0o600 });
+
+    const result = runTrust(["add", "example.com", "--tier", "trusted"], env, NOW);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /trust\.json is not valid JSON/);
+
+    // Verify file wasn't modified
+    const content = readFileSync(trustJsonPath, "utf8");
+    assert.equal(content, "{oops");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("trust accept refuses to write when trust.json is invalid", () => {
+  const { f, env } = withData();
+  try {
+    ensureDataDir(env.dataDir);
+    const trustJsonPath = trustPath(env.dataDir);
+    writeFileSync(trustJsonPath, "{oops", { mode: 0o600 });
+
+    const result = runTrust(["accept"], env, NOW);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /trust\.json is not valid JSON/);
+
+    // Verify file wasn't modified
+    const content = readFileSync(trustJsonPath, "utf8");
+    assert.equal(content, "{oops");
   } finally {
     f.cleanup();
   }

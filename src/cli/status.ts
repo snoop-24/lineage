@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { Store } from "../core/store.ts";
 import { tilde } from "../core/report.ts";
 import { hooksInstalled, readSettings, type Settings } from "../claude-settings.ts";
@@ -6,7 +6,10 @@ import { loadConfig } from "../config.ts";
 import { configPath, dbPath, errorLogPath, resolveEnv, trustPath, type Env } from "../paths.ts";
 import { VERSION } from "../version.ts";
 import { countErrorLines } from "./report.ts";
+import { trustFileInvalid } from "./trust.ts";
 import { emit, ok, type CmdResult } from "./result.ts";
+
+const TRUST_JSON_INVALID_MSG = "Trust rules: WARNING: trust.json is not valid JSON; your trust rules are not being applied (fix or delete it)";
 
 export function runStatus(env: Env): CmdResult {
   const L: string[] = [`pvg ${VERSION}`];
@@ -49,16 +52,8 @@ export function runStatus(env: Env): CmdResult {
 
   // Check trust.json validity (ruling 2)
   const trustJsonPath = trustPath(env.dataDir);
-  if (existsSync(trustJsonPath)) {
-    try {
-      const content = readFileSync(trustJsonPath, "utf8");
-      const parsed = JSON.parse(content);
-      if (parsed === null || typeof parsed !== "object") {
-        L.push("Trust rules: WARNING: trust.json is not valid JSON; your trust rules are not being applied (fix or delete it)");
-      }
-    } catch {
-      L.push("Trust rules: WARNING: trust.json is not valid JSON; your trust rules are not being applied (fix or delete it)");
-    }
+  if (existsSync(trustJsonPath) && trustFileInvalid(trustJsonPath)) {
+    L.push(TRUST_JSON_INVALID_MSG);
   }
 
   return ok(L);

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { Store } from "../core/store.ts";
 import { classifiedIngests } from "../core/report.ts";
@@ -10,6 +10,18 @@ import { dbPath, ensureDataDir, resolveEnv, trustPath, type Env } from "../paths
 import { emit, ok, usage, type CmdResult } from "./result.ts";
 
 const ADD_USAGE = "Usage: pvg trust add <source> --tier <trusted|dependency|external>";
+const TRUST_JSON_INVALID_MSG = "trust.json is not valid JSON; fix or delete it before changing trust rules";
+
+export function trustFileInvalid(path: string): boolean {
+  if (!existsSync(path)) return false;
+  try {
+    const content = readFileSync(path, "utf8");
+    const parsed = JSON.parse(content);
+    return parsed === null || typeof parsed !== "object";
+  } catch {
+    return true;
+  }
+}
 
 function currentProposals(env: Env, now: Date): ProposalItem[] {
   if (!existsSync(dbPath(env.dataDir))) return [];
@@ -61,6 +73,7 @@ export function runTrust(args: string[], env: Env, now: Date = new Date()): CmdR
     const source = parsed.positionals[0];
     const tier = parseTier(parsed.values.tier ?? "");
     if (!source || !tier) return usage(ADD_USAGE);
+    if (trustFileInvalid(path)) return { code: 1, out: "", err: `${TRUST_JSON_INVALID_MSG}\n` };
     ensureDataDir(env.dataDir);
     const rule: TrustRule = { ...inferRule(source), tier };
     saveTrust(path, addRule(loadTrust(path), rule));
@@ -70,6 +83,7 @@ export function runTrust(args: string[], env: Env, now: Date = new Date()): CmdR
   if (sub === "remove") {
     const source = rest[0];
     if (!source) return usage("Usage: pvg trust remove <source>");
+    if (trustFileInvalid(path)) return { code: 1, out: "", err: `${TRUST_JSON_INVALID_MSG}\n` };
     const key = inferRule(source);
     const r = removeRule(loadTrust(path), key.type, key.match);
     if (r.removed) saveTrust(path, r.cfg);
@@ -77,6 +91,7 @@ export function runTrust(args: string[], env: Env, now: Date = new Date()): CmdR
   }
 
   if (sub === "accept") {
+    if (trustFileInvalid(path)) return { code: 1, out: "", err: `${TRUST_JSON_INVALID_MSG}\n` };
     const proposals = currentProposals(env, now);
     if (proposals.length === 0) return ok(["No proposals to accept yet."]);
     ensureDataDir(env.dataDir);
