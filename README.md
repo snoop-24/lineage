@@ -29,26 +29,31 @@ pvg uninstall [--purge]                     # removes exactly what init added; -
 | Label | Meaning |
 |---|---|
 | MATCHED | The new memory text overlaps content from an untrusted source read earlier in the session |
-| UNATTRIBUTED (in session) | Memory changed through a shell command or script during a session |
+| UNATTRIBUTED (in session) | Memory changed through a shell command, script or MCP tool during a session |
 | EXPOSED | Untrusted content was read earlier in the session, with no overlap found |
 | UNATTRIBUTED (between sessions) | Changed outside any session (often a human edit) |
 | CLEAN | No untrusted content was read before the change |
+
+Changes to Claude Code settings files (`.claude/settings.json`, `.claude/settings.local.json`) are listed separately under SETTINGS CHANGES; entries marked `!` touch hooks or remove pvg's deny rule.
 
 ## Privacy
 
 Everything stays on your machine in `~/.pvg/` (files are mode 0600). pvg makes no network calls, uses no AI models and has no telemetry.
 
-pvg stores locally: your prompts, snapshots of memory and instruction files (current and previous versions), and Bash command strings. These are kept until `pvg uninstall --purge`. Only content read from untrusted sources (web pages, MCP results, network fetches, files outside your project) expires after 30 days. The timestamped settings.json backups that init and uninstall write remain after `pvg uninstall --purge`; delete them manually if needed.
+pvg stores locally: your prompts, snapshots of memory and instruction files (current and previous versions), and Bash command strings. These are kept until `pvg uninstall --purge`. Only content read from untrusted sources (web pages, MCP results, network fetches, files outside your project other than agent memory and instruction files) expires after 30 days. `errors.log` holds error messages only, with no prompt or tool content. The timestamped settings.json backups that init and uninstall write remain after `pvg uninstall --purge`; delete them manually if needed.
 
 ## Limitations (v0.1)
 
 - **Claude Code only;** macOS and Linux.
 - **No blocking:** pausing suspicious writes comes in v0.2.
-- **Script writes are caught only after the Bash command that made them finishes.**
+- **Script writes are caught only after the Bash command or MCP call that made them finishes.**
 - **Files that already existed when pvg first saw them are baselined silently.**
 - **Indicator matching can produce occasional false matches** on common values.
 - **The event log detects edits to past entries, but not deletion of the newest entries** (no external anchor).
 - **`--protect-data` blocks Claude's edit tools, not shell commands** that write to `~/.pvg`.
+- **Attribution only looks at untrusted content read earlier in the same session;** content read in an earlier session is not linked to a later change.
+- **Files inside the project, including repos cloned into it, are trusted by default.** Demote them with `pvg trust add '/abs/path/**' --tier untrusted`.
+- **Not yet verified against a real Claude Code session:** the PostToolUse payload field names and the live demo.
 
 ## License
 
