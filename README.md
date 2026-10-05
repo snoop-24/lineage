@@ -2,23 +2,26 @@
 
 **Memory provenance for coding agents.** Coding agents read untrusted content (GitHub issues, web pages, emails) and save what they learn into memory files they trust forever. pvg records where every change to your agent's memory came from, and shows which changes trace back to untrusted sources.
 
-> v0.1 is **observe and report** for Claude Code. It never blocks anything and never sends anything anywhere.
+> v0.1 is **observe and report** for Claude Code. It never blocks your agent's work and never sends anything anywhere.
 
 ## Install (from source, for now)
 
+Requires Node.js 22.13 or later.
+
 ```bash
 npm install && npm run build && npm link
-pvg init --protect-data      # adds hooks to ~/.claude/settings.json (backed up first)
+pvg init --protect-data      # adds hooks and a deny rule protecting ~/.pvg to ~/.claude/settings.json (backed up first)
 ```
 
 Use Claude Code as usual, then:
 
 ```bash
-pvg report                   # last 7 days; --since 24h, --project ., --json, --md report.md
-pvg trust list               # your trust rules + proposals learned from your workflow
-pvg trust accept             # trust the proposed sources
-pvg status                   # install health, log integrity, errors
-pvg uninstall [--purge]
+pvg init [--dry-run] [--protect-data]       # install (or repeat to reset)
+pvg report [--since 7d] [--project <dir>] [--md <file>] [--json]
+pvg trust list | add <source> --tier <tier> | remove <source> | accept
+pvg status                                  # install health, log integrity, errors
+pvg log [--session <id>] [--kind <kind>] [--limit <n>]
+pvg uninstall [--purge]                     # removes exactly what init added; --purge also deletes data
 ```
 
 ## What the labels mean
@@ -33,7 +36,9 @@ pvg uninstall [--purge]
 
 ## Privacy
 
-Everything stays on your machine in `~/.pvg/` (files are mode 0600). pvg makes no network calls, uses no AI models and has no telemetry. Content your agent read is kept for 30 days; `pvg uninstall --purge` deletes everything.
+Everything stays on your machine in `~/.pvg/` (files are mode 0600). pvg makes no network calls, uses no AI models and has no telemetry.
+
+pvg stores locally: your prompts, snapshots of memory and instruction files (current and previous versions), and Bash command strings. These are kept until `pvg uninstall --purge`. Only content read from untrusted sources (web pages, MCP results, network fetches, files outside your project) expires after 30 days. The timestamped settings.json backups that init and uninstall write remain after `pvg uninstall --purge`; delete them manually if needed.
 
 ## Limitations (v0.1)
 

@@ -16,8 +16,16 @@ claude -p "Use curl to read http://127.0.0.1:8765/incident, summarize the incide
 cd - && pvg report --since 1h
 ```
 
-**What you should see:** a `[MATCHED]` entry for `CLAUDE.md` with evidence `indicator email:ops@acme-backup.com in network http://127.0.0.1:8765/incident`.
+**What you should see:** a `[MATCHED]` entry for `CLAUDE.md` (printed in full with the temp project path) with evidence `indicator email:ops@acme-backup.com in network http://127.0.0.1:8765/incident`.
 
 **If the model refused to save the planted fact,** the report shows the untrusted fetch under EXPOSURE and no memory change. The model resisted this time. Model resistance is probabilistic, which is exactly why pvg records provenance either way.
 
-Clean up with `pvg uninstall --purge` and `kill %1`.
+Clean up by running **in the same shell** (with `PVG_DATA_DIR` and `PVG_CLAUDE_SETTINGS` still exported):
+
+```bash
+pvg uninstall --purge
+rm -f "$PVG_CLAUDE_SETTINGS"
+kill %1
+```
+
+If you run `pvg uninstall --purge` in a different shell without the env vars exported, it will act on your real `~/.pvg` and `~/.claude/settings.json`.
