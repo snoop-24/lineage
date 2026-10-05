@@ -63,3 +63,11 @@ test("extractIndicators stays fast on long unbroken input", () => {
   console.log(`  100k × "a.": ${time3.toFixed(2)} ms`);
   assert.ok(time3 < 250, `expected < 250ms, got ${time3.toFixed(2)}ms`);
 });
+
+test("M1: dotted code identifiers are not domains; real and example domains still are", () => {
+  const ind = extractIndicators("Use Object.keys(x) and fs.readFileSync(p); also path.join and console.log. Mail ops@acme-backup.com, see acme-status.example, docs.python.org, x.co.uk, a.de and evil.io");
+  const domains = [...ind].filter((i) => i.startsWith("domain:")).sort();
+  assert.deepEqual(domains, [
+    "domain:a.de", "domain:acme-backup.com", "domain:acme-status.example", "domain:docs.python.org", "domain:evil.io", "domain:x.co.uk",
+  ]);
+});

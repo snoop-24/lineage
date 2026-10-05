@@ -6,6 +6,16 @@ const FILE_EXT_TLDS = new Set([
   "lock", "toml", "rs", "go", "rb", "java", "c", "h", "cpp", "log", "csv", "xml", "ini", "cfg", "env",
 ]);
 
+// Generic TLDs accepted for DOMAIN indicators; other TLDs must be 2-letter country codes. Keeps "Object.keys" out.
+const KNOWN_GTLDS = new Set([
+  "com", "org", "net", "edu", "gov", "mil", "int", "io", "dev", "ai", "app", "co", "me", "info", "biz", "xyz", "tech",
+  "cloud", "site", "online", "store", "blog", "page", "link", "live", "news", "example", "test", "local", "internal",
+]);
+
+function isDomainTld(tld: string): boolean {
+  return KNOWN_GTLDS.has(tld) || (tld.length === 2 && !FILE_EXT_TLDS.has(tld));
+}
+
 const MAX_TOKEN = 512;
 const EMAIL = /[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,24}/gi;
 const URL_RE = /https?:\/\/[^\s<>"'`]+/gi;
@@ -26,7 +36,7 @@ export function extractIndicators(text: string): Set<string> {
     for (const m of token.matchAll(URL_RE)) out.add(`url:${m[0].replace(/[.,;:!?)\]}]+$/, "").toLowerCase()}`);
     for (const m of token.matchAll(DOMAIN)) {
       const d = m[0].toLowerCase();
-      if (!FILE_EXT_TLDS.has(d.slice(d.lastIndexOf(".") + 1))) out.add(`domain:${d}`);
+      if (isDomainTld(d.slice(d.lastIndexOf(".") + 1))) out.add(`domain:${d}`);
     }
   }
 
