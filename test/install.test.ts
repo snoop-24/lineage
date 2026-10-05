@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildHookCommand, denyRuleFor, initCli, runInit, runUninstall } from "../src/cli/install.ts";
 import { hooksInstalled, readSettings } from "../src/claude-settings.ts";
@@ -233,8 +233,8 @@ test("fallback + purge: removes hooks and deletes data dir", () => {
     assert.ok(hooksInstalled(readSettings(env.claudeSettingsPath), CMD));
 
     // Delete config.json only (simulate lost config)
-    rmSync(env.dataDir, { recursive: true, force: true });
-    assert.equal(existsSync(env.dataDir), false);
+    rmSync(configPath(env.dataDir));
+    assert.equal(existsSync(env.dataDir), true);
 
     // Uninstall with purge should remove hooks by pattern and delete data dir
     const r = runUninstall(env, { purge: true, now: NOW });
@@ -316,6 +316,55 @@ test("user's pre-existing empty permissions object survives", () => {
 
     // Empty permissions should survive
     assert.deepEqual(s.permissions, {});
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("F2: purge refuses a data dir holding non-pvg files; settings and dir untouched", () => {
+  const { t, env } = setup();
+  try {
+    runInit(env, opts({ protectData: true }));
+    writeFileSync(join(env.dataDir, "notes.txt"), "mine\n");
+    const before = readFileSync(env.claudeSettingsPath, "utf8");
+    assert.throws(
+      () => runUninstall(env, { purge: true, now: NOW }),
+      (e: Error) => e.message.includes(env.dataDir) && e.message.includes("notes.txt") && /refusing to purge/.test(e.message),
+    );
+    assert.equal(readFileSync(env.claudeSettingsPath, "utf8"), before);
+    assert.ok(existsSync(join(env.dataDir, "notes.txt")));
+    assert.ok(existsSync(join(env.dataDir, "pvg.db")));
+    assert.equal(loadConfig(configPath(env.dataDir)).installedCommand, CMD);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("F2: purge refuses a directory without pvg.db or config.json", () => {
+  const { t, env } = setup();
+  try {
+    mkdirSync(env.dataDir);
+    writeFileSync(join(env.dataDir, "errors.log"), "x\n");
+    assert.throws(() => runUninstall(env, { purge: true, now: NOW }), /refusing to purge.*not a pvg data directory/);
+    assert.ok(existsSync(join(env.dataDir, "errors.log")));
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("F2: purge deletes a normal pvg data dir; a missing data dir is a no-op", () => {
+  const { t, env } = setup();
+  try {
+    runInit(env, opts());
+    writeFileSync(join(env.dataDir, "errors.log"), "x\n");
+    writeFileSync(join(env.dataDir, "trust.json"), "{\"rules\":[]}");
+    const r = runUninstall(env, { purge: true, now: NOW });
+    assert.equal(r.removed, true);
+    assert.equal(r.purged, true);
+    assert.equal(existsSync(env.dataDir), false);
+    const again = runUninstall(env, { purge: true, now: NOW });
+    assert.equal(again.purged, false);
+    assert.equal(existsSync(env.dataDir), false);
   } finally {
     t.cleanup();
   }

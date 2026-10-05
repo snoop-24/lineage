@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -118,14 +118,32 @@ export interface UninstallResult {
   message: string;
 }
 
+const PVG_OWNED_ENTRIES = new Set(["pvg.db", "pvg.db-wal", "pvg.db-shm", "config.json", "trust.json", "errors.log"]);
+
+// Returns true when dataDir exists and is safe to delete; false when it does not exist; throws otherwise.
+function checkPurgeTarget(env: Env): boolean {
+  const resolved = resolve(env.dataDir);
+  if (resolved === resolve(env.home) || resolved === "/") {
+    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory`);
+  }
+  if (!existsSync(env.dataDir)) return false;
+  if (!statSync(env.dataDir).isDirectory()) {
+    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory (not a directory)`);
+  }
+  const entries = readdirSync(env.dataDir).sort();
+  const unexpected = entries.find((name) => !PVG_OWNED_ENTRIES.has(name));
+  if (unexpected !== undefined) {
+    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory (unexpected entry "${unexpected}")`);
+  }
+  if (!entries.includes("pvg.db") && !entries.includes("config.json")) {
+    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory (no pvg.db or config.json)`);
+  }
+  return true;
+}
+
 export function runUninstall(env: Env, o: { purge: boolean; now: Date }): UninstallResult {
   // SAFETY CHECK FIRST: if purging, validate the path before any writes
-  if (o.purge) {
-    const resolved = resolve(env.dataDir);
-    if (resolved === resolve(env.home) || resolved === "/") {
-      throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory`);
-    }
-  }
+  const purgeDataDir = o.purge && checkPurgeTarget(env);
 
   const cfg = loadConfig(configPath(env.dataDir));
   let backupPath: string | null = null;
@@ -178,7 +196,7 @@ export function runUninstall(env: Env, o: { purge: boolean; now: Date }): Uninst
 
   // Purge always runs after either path (if removal happened or not)
   let purged = false;
-  if (o.purge) {
+  if (purgeDataDir) {
     rmSync(env.dataDir, { recursive: true, force: true });
     purged = true;
   }
