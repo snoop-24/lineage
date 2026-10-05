@@ -1,5 +1,5 @@
 import { rmSync } from "node:fs";
-import { extname, isAbsolute, relative } from "node:path";
+import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
@@ -44,6 +44,8 @@ export function pvgEnvVars(processEnv: NodeJS.ProcessEnv): Record<string, string
   return out;
 }
 
+export const PVG_HOOK_PATTERN = /--no-warnings '[^']*\/cli\.(?:js|ts)' hook$/;
+
 export interface InitOptions {
   dryRun: boolean;
   protectData: boolean;
@@ -73,16 +75,20 @@ export function runInit(env: Env, o: InitOptions): InitResult {
     if (!present) changes.push(`add ${ev} hook${ev === "PostToolUse" ? ` (matcher ${POST_TOOL_MATCHER})` : ""}`);
   }
   let next = addHooks(base, o.command);
+  let protectDataAdded = cfg.protectDataAdded;
   if (o.protectData) {
     const rule = denyRuleFor(env);
-    if (!(base.permissions?.deny ?? []).includes(rule)) changes.push(`add permission deny rule ${rule}`);
+    if (!(base.permissions?.deny ?? []).includes(rule)) {
+      changes.push(`add permission deny rule ${rule}`);
+      protectDataAdded = true;
+    }
     next = addDenyRule(next, rule);
   }
   if (o.dryRun) return { changes, backupPath: null, baselined: 0, command: o.command };
 
   ensureDataDir(env.dataDir);
+  saveConfig(configPath(env.dataDir), { ...cfg, installedCommand: o.command, protectDataAdded });
   const backupPath = changes.length > 0 ? writeSettingsWithBackup(env.claudeSettingsPath, next, o.now) : null;
-  saveConfig(configPath(env.dataDir), { ...cfg, installedCommand: o.command });
   const store = Store.open(env.dataDir);
   let baselined = 0;
   try {
@@ -107,14 +113,76 @@ export function runUninstall(env: Env, o: { purge: boolean; now: Date }): Uninst
   const cfg = loadConfig(configPath(env.dataDir));
   let backupPath: string | null = null;
   let removed = false;
+  let settings = readSettings(env.claudeSettingsPath);
+
   if (cfg.installedCommand) {
-    const settings = readSettings(env.claudeSettingsPath);
-    const next = removeDenyRule(removeHooks(settings, cfg.installedCommand), denyRuleFor(env));
+    // Remove hooks by installed command
+    let next = removeHooks(settings, cfg.installedCommand);
+
+    // Remove deny rule only if we added it
+    if (cfg.protectDataAdded) {
+      next = removeDenyRule(next, denyRuleFor(env));
+    }
+
+    // Clean up empty permissions objects
+    if (next.permissions?.deny?.length === 0) {
+      delete next.permissions.deny;
+    }
+    if (next.permissions && Object.keys(next.permissions).length === 0) {
+      delete next.permissions;
+    }
+
     backupPath = writeSettingsWithBackup(env.claudeSettingsPath, next, o.now);
     removed = true;
-    if (!o.purge) saveConfig(configPath(env.dataDir), { ...cfg, installedCommand: null });
+    if (!o.purge) saveConfig(configPath(env.dataDir), { ...cfg, installedCommand: null, protectDataAdded: false });
+  } else {
+    // Config missing: try pattern-based fallback
+    const commands = new Set<string>();
+    for (const groups of Object.values(settings.hooks ?? {})) {
+      for (const g of groups) {
+        for (const h of g.hooks ?? []) {
+          if (h.type === "command" && h.command && PVG_HOOK_PATTERN.test(h.command)) {
+            commands.add(h.command);
+          }
+        }
+      }
+    }
+
+    if (commands.size > 0) {
+      let next = settings;
+      for (const cmd of commands) {
+        next = removeHooks(next, cmd);
+      }
+
+      // Clean up empty permissions objects
+      if (next.permissions?.deny?.length === 0) {
+        delete next.permissions.deny;
+      }
+      if (next.permissions && Object.keys(next.permissions).length === 0) {
+        delete next.permissions;
+      }
+
+      backupPath = writeSettingsWithBackup(env.claudeSettingsPath, next, o.now);
+      removed = true;
+      const suffix = commands.size === 1 ? "y" : "ies";
+      return {
+        removed,
+        backupPath,
+        purged: false,
+        message: `Removed ${commands.size} pvg hook entr${suffix} found by pattern (pvg config was missing).`,
+      };
+    }
   }
-  if (o.purge) rmSync(env.dataDir, { recursive: true, force: true });
+
+  if (o.purge) {
+    // Safety check: refuse to purge dangerous paths
+    const resolved = resolve(env.dataDir);
+    if (resolved === resolve(env.home) || resolved === "/") {
+      throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory`);
+    }
+    rmSync(env.dataDir, { recursive: true, force: true });
+  }
+
   return {
     removed,
     backupPath,

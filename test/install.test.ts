@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildHookCommand, denyRuleFor, initCli, runInit, runUninstall } from "../src/cli/install.ts";
 import { hooksInstalled, readSettings } from "../src/claude-settings.ts";
@@ -124,6 +124,102 @@ test("tampered install: broken matcher is detected and repaired", () => {
     // After init, hooks should be correctly installed again
     const s2 = readSettings(env.claudeSettingsPath);
     assert.ok(hooksInstalled(s2, CMD));
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("init/uninstall round trip restores original settings with protect-data", () => {
+  const { t, env } = setup();
+  try {
+    const original = readSettings(env.claudeSettingsPath);
+    assert.equal(original.permissions, undefined);
+
+    // Init with protect-data
+    runInit(env, opts({ protectData: true }));
+    let afterInit = readSettings(env.claudeSettingsPath);
+    assert.ok(afterInit.permissions?.deny?.includes(denyRuleFor(env)));
+
+    // Uninstall without purge
+    runUninstall(env, { purge: false, now: NOW });
+    const afterUninstall = readSettings(env.claudeSettingsPath);
+
+    // Should restore original (no permissions, my-linter hook still there)
+    assert.deepEqual(afterUninstall, original);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("uninstall keeps user's existing deny rules", () => {
+  const { t, env } = setup();
+  try {
+    // Start with user's own deny rule (not the pvg rule)
+    writeFileSync(env.claudeSettingsPath, JSON.stringify({
+      model: "opus",
+      hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "my-linter" }] }] },
+      permissions: { deny: ["Edit(~/.private/**)", "Edit(~/.pvg/**)"] }
+    }) + "\n");
+
+    // Init without protect-data
+    const r = runInit(env, opts({ protectData: false }));
+    const cfg1 = loadConfig(configPath(env.dataDir));
+    assert.equal(cfg1.protectDataAdded, false);  // Not added because protectData: false
+
+    // Uninstall
+    runUninstall(env, { purge: false, now: NOW });
+    const s = readSettings(env.claudeSettingsPath);
+
+    // User's rules stay untouched
+    assert.ok(s.permissions?.deny?.includes("Edit(~/.private/**)"));
+    assert.ok(s.permissions?.deny?.includes("Edit(~/.pvg/**)"));
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("uninstall with missing config: pattern-based fallback removes hooks", () => {
+  const { t, env } = setup();
+  try {
+    // Init normally
+    runInit(env, opts());
+    assert.ok(hooksInstalled(readSettings(env.claudeSettingsPath), CMD));
+
+    // Delete the config file (simulate lost or deleted ~/.pvg)
+    rmSync(env.dataDir, { recursive: true, force: true });
+    assert.equal(existsSync(env.dataDir), false);
+
+    // Uninstall should still find and remove hooks by pattern
+    const r = runUninstall(env, { purge: false, now: NOW });
+    assert.equal(r.removed, true);
+    assert.match(r.message, /Removed.*hook.*found by pattern/);
+
+    // Hooks should be gone, my-linter stays
+    const s = readSettings(env.claudeSettingsPath);
+    assert.equal(hooksInstalled(s, CMD), false);
+    assert.equal(s.hooks?.PostToolUse?.[0]?.hooks[0]?.command, "my-linter");
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("purge refuses dangerous paths", () => {
+  const { t, env } = setup();
+  try {
+    // Create a scenario where dataDir === home (dangerous)
+    const dangerousEnv: typeof env = { ...env, dataDir: env.home };
+
+    // Init to create config
+    runInit(dangerousEnv, opts());
+
+    // Attempting to purge should throw
+    assert.throws(
+      () => runUninstall(dangerousEnv, { purge: true, now: NOW }),
+      /refusing to purge.*not a pvg data directory/
+    );
+
+    // Home directory should still exist
+    assert.ok(existsSync(dangerousEnv.home));
   } finally {
     t.cleanup();
   }

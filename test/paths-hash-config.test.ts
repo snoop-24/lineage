@@ -33,8 +33,8 @@ test("config defaults, round-trip, and invalid values", () => {
   try {
     const p = join(t.path, "config.json");
     assert.deepEqual(loadConfig(p), DEFAULT_CONFIG);
-    saveConfig(p, { installedCommand: "x", retentionDays: 7, ingestCapBytes: 10 });
-    assert.deepEqual(loadConfig(p), { installedCommand: "x", retentionDays: 7, ingestCapBytes: 10 });
+    saveConfig(p, { installedCommand: "x", protectDataAdded: false, retentionDays: 7, ingestCapBytes: 10 });
+    assert.deepEqual(loadConfig(p), { installedCommand: "x", protectDataAdded: false, retentionDays: 7, ingestCapBytes: 10 });
     writeFileSync(p, JSON.stringify({ installedCommand: 3, retentionDays: -1 }));
     assert.deepEqual(loadConfig(p), DEFAULT_CONFIG);
   } finally {
