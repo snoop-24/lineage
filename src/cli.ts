@@ -3,6 +3,9 @@ import { VERSION } from "./version.ts";
 import { hookCommand } from "./cli/hook.ts";
 import { initCommand, uninstallCommand } from "./cli/install.ts";
 import { reportCommand } from "./cli/report.ts";
+import { trustCommand } from "./cli/trust.ts";
+import { statusCommand } from "./cli/status.ts";
+import { logCommand } from "./cli/log.ts";
 
 process.umask(0o077);
 
@@ -24,6 +27,9 @@ const commands: Record<string, Command> = {
   init: initCommand,
   uninstall: uninstallCommand,
   report: reportCommand,
+  trust: trustCommand,
+  status: statusCommand,
+  log: logCommand,
 };
 
 async function main(argv: string[]): Promise<number> {
