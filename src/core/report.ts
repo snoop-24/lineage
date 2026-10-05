@@ -124,6 +124,8 @@ function renderChange(c: AttributedChange, home: string): string[] {
   if (typeof cmd === "string" && cmd.length > 0) L.push(`    command: ${safe(clip(cmd, 120))}`);
   for (const line of c.addedLines.slice(0, 5)) L.push(`    + ${safe(clip(line, 160))}`);
   if (c.addedLines.length > 5) L.push(`    + … ${c.addedLines.length - 5} more line(s)`);
+  for (const line of c.removedLines.slice(0, 5)) L.push(`    - ${safe(clip(line, 160))}`);
+  if (c.removedLines.length > 5) L.push(`    - … ${c.removedLines.length - 5} more line(s)`);
   for (const m of c.matches.slice(0, 5)) {
     const what = m.kind === "words" ? `shared text "${safe(clip(m.evidence, 80))}"` : `indicator ${safe(m.evidence)}`;
     L.push(`    evidence: ${what} in ${m.sourceKind} ${safe(clip(m.sourceId, 100))} (${m.secondsBefore}s earlier)`);

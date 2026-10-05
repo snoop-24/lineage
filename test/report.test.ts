@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { record } from "../src/core/recorder.ts";
 import { buildReport, renderMarkdown, renderText, reportJson } from "../src/core/report.ts";
@@ -145,6 +145,20 @@ test("F1: renderMarkdown fence is longer than any backtick run in the content", 
     assert.ok(md.startsWith("# Provenance report\n\n`````text\n"), md);
     assert.ok(md.endsWith("\n`````\n"), md);
     assert.equal(renderMarkdown(buildReport(f.store, f.deps.trust, { sinceIso: "2030-01-01T00:00:00.000Z", projectRoot: null, home: f.home, health: HEALTH, now: new Date() })).split("\n")[2], "```text");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("M5: removed lines are shown", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    record({ ...f.base("s1"), kind: "ingest", toolName: "WebFetch", sourceKind: "web", sourceId: "https://x.example/a", text: "page" }, f.deps);
+    writeFileSync(join(f.memoryDir, "MEMORY.md"), "");
+    record({ ...f.base("s1"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
+    const text = renderText(buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") }));
+    assert.match(text, /\[EXPOSED\][^\n]*MEMORY\.md\n(?:.*\n)*? {4}- - existing fact\n/);
   } finally {
     f.cleanup();
   }
