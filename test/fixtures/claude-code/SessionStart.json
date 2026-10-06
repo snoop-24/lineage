@@ -1,7 +1,8 @@
 {
-  "session_id": "61d9ca66-4a68-4d5e-90c3-4b3008f7c2b8",
-  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/61d9ca66-4a68-4d5e-90c3-4b3008f7c2b8.jsonl",
+  "session_id": "1608a10b-9ae0-4780-9f30-d909d8c0fe0e",
+  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e.jsonl",
   "cwd": "/home/tester/IH-guard-research/.capture/sandbox",
+  "scratchpad_dir": "/private/tmp/claude-501/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e/scratchpad",
   "hook_event_name": "SessionStart",
   "source": "startup"
 }

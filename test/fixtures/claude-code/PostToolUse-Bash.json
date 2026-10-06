@@ -1,0 +1,26 @@
+{
+  "session_id": "1608a10b-9ae0-4780-9f30-d909d8c0fe0e",
+  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e.jsonl",
+  "cwd": "/home/tester/IH-guard-research/.capture/sandbox",
+  "scratchpad_dir": "/private/tmp/claude-501/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e/scratchpad",
+  "prompt_id": "c1da41a3-1c11-4833-83c1-4d92bbe664e1",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "curl -s https://example.com | head -c 200",
+    "description": "Fetch first 200 bytes of example.com"
+  },
+  "tool_response": {
+    "stdout": "<!doctype html><html lang=en><head><meta charset=utf-8><link rel=icon href=data:,><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Example Domain</title><style>html{color-scheme",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_013gxg6Y9uLZLz4MuhdTnQXE",
+  "duration_ms": 189
+}

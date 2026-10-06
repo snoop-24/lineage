@@ -1,0 +1,27 @@
+{
+  "session_id": "1608a10b-9ae0-4780-9f30-d909d8c0fe0e",
+  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e.jsonl",
+  "cwd": "/home/tester/IH-guard-research/.capture/sandbox",
+  "scratchpad_dir": "/private/tmp/claude-501/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e/scratchpad",
+  "prompt_id": "c1da41a3-1c11-4833-83c1-4d92bbe664e1",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/tester/IH-guard-research/.capture/sandbox/notes.md",
+    "content": "hello"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/tester/IH-guard-research/.capture/sandbox/notes.md",
+    "content": "hello",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  },
+  "tool_use_id": "toolu_01LdEPQqrnuoEuR157DEqqbo",
+  "duration_ms": 9
+}

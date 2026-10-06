@@ -128,3 +128,30 @@ for (const f of fixtures) {
     assert.ok(events.some((e) => e.kind === expected), `got ${JSON.stringify(events.map((e) => e.kind))}`);
   });
 }
+
+// Field-level contract for the PostToolUse payloads captured on Claude Code 2.1.290.
+const SANDBOX = "/home/tester/IH-guard-research/.capture/sandbox";
+const PAYLOAD_EXPECT: Record<string, (e: Record<string, unknown>) => void> = {
+  "PostToolUse-Read": (e) => {
+    assert.equal(e.sourceId, `${SANDBOX}/README.md`);
+    assert.match(String(e.text), /help@sandbox\.example/);
+  },
+  "PostToolUse-WebFetch": (e) => {
+    assert.equal(e.sourceId, "https://example.com");
+    assert.match(String(e.text), /documentation examples/);
+  },
+  "PostToolUse-Bash": (e) => {
+    assert.equal(e.command, "curl -s https://example.com | head -c 200");
+    assert.match(String(e.output), /Example Domain/);
+  },
+  "PostToolUse-Edit": (e) => assert.equal(e.filePath, `${SANDBOX}/CLAUDE.md`),
+  "PostToolUse-Write": (e) => assert.equal(e.filePath, `${SANDBOX}/notes.md`),
+};
+for (const [name, check] of Object.entries(PAYLOAD_EXPECT)) {
+  const path = join(FIXTURE_DIR, `${name}.json`);
+  test(`captured ${name} yields the expected source and text`, { skip: existsSync(path) ? false : "not captured" }, () => {
+    const events = toCommonEvents(JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>, NOW);
+    assert.equal(events.length, 1);
+    check(events[0] as unknown as Record<string, unknown>);
+  });
+}

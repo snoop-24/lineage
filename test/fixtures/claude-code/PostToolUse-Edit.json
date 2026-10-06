@@ -1,0 +1,41 @@
+{
+  "session_id": "1608a10b-9ae0-4780-9f30-d909d8c0fe0e",
+  "transcript_path": "/home/tester/.claude/projects/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e.jsonl",
+  "cwd": "/home/tester/IH-guard-research/.capture/sandbox",
+  "scratchpad_dir": "/private/tmp/claude-501/-home-tester-IH-guard-research--capture-sandbox/1608a10b-9ae0-4780-9f30-d909d8c0fe0e/scratchpad",
+  "prompt_id": "c1da41a3-1c11-4833-83c1-4d92bbe664e1",
+  "permission_mode": "acceptEdits",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/tester/IH-guard-research/.capture/sandbox/CLAUDE.md",
+    "old_string": "# Sandbox",
+    "new_string": "# Sandbox\nCapture test fact.",
+    "replace_all": false
+  },
+  "tool_response": {
+    "filePath": "/home/tester/IH-guard-research/.capture/sandbox/CLAUDE.md",
+    "oldString": "# Sandbox",
+    "newString": "# Sandbox\nCapture test fact.",
+    "originalFile": "# Sandbox\n",
+    "structuredPatch": [
+      {
+        "oldStart": 1,
+        "oldLines": 1,
+        "newStart": 1,
+        "newLines": 2,
+        "lines": [
+          " # Sandbox",
+          "+Capture test fact."
+        ]
+      }
+    ],
+    "userModified": false,
+    "replaceAll": false
+  },
+  "tool_use_id": "toolu_01Sjjtaw8h5ctzSdt6YtcgaH",
+  "duration_ms": 5
+}
