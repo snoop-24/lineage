@@ -18,11 +18,11 @@ Status: COMPLETE for the core tools. A first headless run (2026-10-03, Claude Co
 - `UserPromptSubmit`: plus `prompt_id`, `permission_mode`, `prompt`.
 - `PostToolUse`: plus `prompt_id`, `permission_mode`, `effort`, `tool_name`, `tool_input`, `tool_response`, `tool_use_id`, `duration_ms`.
 
-No `agent_id` appeared on any event (it is optional in the adapter). `scratchpad_dir` and `effort` are new since 2.1.263 and are ignored by pvg.
+No `agent_id` appeared on any event (it is optional in the adapter). `scratchpad_dir` and `effort` are new since 2.1.263 and are ignored by lineage.
 
 ## Per tool
 
-`tool_response` is an object for every tool. pvg extracts text by walking every string in it, so the exact shape does not matter for ingest.
+`tool_response` is an object for every tool. Lineage extracts text by walking every string in it, so the exact shape does not matter for ingest.
 
 | Tool | `tool_input` keys | `tool_response` keys |
 |---|---|---|
@@ -44,7 +44,7 @@ Registered but did not fire (expected: no settings changed mid-session).
 
 ## Differences from the plan
 
-None for the names pvg uses: `tool_input.file_path`, `tool_input.url`, `tool_input.command`, `prompt`, `file_path`, `memory_type`, `load_reason` all match. `test/adapter.test.ts` checks each captured payload's extracted source and text.
+None for the names Lineage uses: `tool_input.file_path`, `tool_input.url`, `tool_input.command`, `prompt`, `file_path`, `memory_type`, `load_reason` all match. `test/adapter.test.ts` checks each captured payload's extracted source and text.
 
 One behaviour to note: WebFetch's `tool_response.result` is the model's summary of the page, not the raw page text. A planted fact usually survives summarisation (the demo depends on that), but exact 8-word overlaps are less likely than with `curl` through Bash, which returns the raw page in `stdout`.
 
@@ -53,4 +53,4 @@ One behaviour to note: WebFetch's `tool_response.result` is the model's summary 
 1. WebSearch, NotebookEdit, MultiEdit and MCP payloads are not captured.
 2. Spec assumption 4: hooks fire in auto mode. Not verified (this run used `acceptEdits`).
 3. Spec assumption 5: the `FileChanged` hook as a cheaper rescan. Not verified.
-4. Whether 2.1.290 loads `AGENTS.md` as instructions was not checked; pvg does not trust `AGENTS.md` above the project.
+4. Whether 2.1.290 loads `AGENTS.md` as instructions was not checked; Lineage does not trust `AGENTS.md` above the project.

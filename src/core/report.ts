@@ -64,7 +64,7 @@ export function isSettingsPath(path: string): boolean {
   return (basename(path) === "settings.json" || basename(path) === "settings.local.json") && basename(dirname(path)) === ".claude";
 }
 
-// A settings change matters for pvg when it touches hooks or removes pvg's deny rule.
+// A settings change matters for lineage when it touches hooks or removes lineage's deny rule.
 export function settingsChangeFlagged(c: AttributedChange): boolean {
   const touchesHooks = (l: string): boolean => l.includes('"hooks"') || l.includes('"disableAllHooks"');
   return c.addedLines.some(touchesHooks) || c.removedLines.some((l) => touchesHooks(l) || l.includes("Edit("));
@@ -173,10 +173,10 @@ export function renderText(r: ReportData): string {
   const scope = r.projectRoot ? ` (project ${safe(tilde(r.projectRoot, r.home))})` : "";
   L.push(`Provenance report: since ${when(r.sinceIso)}, ${r.sessions} session(s) in ${r.projects} project(s)${scope}`);
   const warnings: string[] = [];
-  if (!r.health.hooksInstalled) warnings.push("pvg hooks are not installed in Claude Code settings. Run: pvg init");
-  if (r.health.tamperEvents > 0) warnings.push(`${r.health.tamperEvents} tamper event(s): pvg hooks were removed or changed. Run: pvg status`);
-  if (!r.health.chainOk) warnings.push("The event log hash chain is broken: the log was edited outside pvg. Run: pvg status");
-  if (r.health.errorLines > 0) warnings.push(`${r.health.errorLines} hook error(s) logged. Run: pvg status`);
+  if (!r.health.hooksInstalled) warnings.push("lineage hooks are not installed in Claude Code settings. Run: lineage init");
+  if (r.health.tamperEvents > 0) warnings.push(`${r.health.tamperEvents} tamper event(s): lineage hooks were removed or changed. Run: lineage status`);
+  if (!r.health.chainOk) warnings.push("The event log hash chain is broken: the log was edited outside lineage. Run: lineage status");
+  if (r.health.errorLines > 0) warnings.push(`${r.health.errorLines} hook error(s) logged. Run: lineage status`);
   if (warnings.length > 0) {
     L.push("", "HEALTH WARNINGS");
     for (const w of warnings) L.push(`  ! ${w}`);
@@ -191,7 +191,7 @@ export function renderText(r: ReportData): string {
   }
   if (r.settingsChanges.length > 0) {
     const flagged = r.settingsChanges.filter(settingsChangeFlagged).length;
-    L.push("", `SETTINGS CHANGES: ${r.settingsChanges.length} total, ${flagged} touching hooks or pvg's deny rule (marked !)`);
+    L.push("", `SETTINGS CHANGES: ${r.settingsChanges.length} total, ${flagged} touching hooks or lineage's deny rule (marked !)`);
     for (const c of r.settingsChanges) {
       L.push("", `  ${settingsChangeFlagged(c) ? "! " : "  "}${safe(tilde(c.event.surfacePath ?? "?", r.home))}`, sessionLine(c.event), ...diffLines(c));
     }
@@ -201,7 +201,7 @@ export function renderText(r: ReportData): string {
     L.push("  No proposals yet (a source needs 3+ reads across 2+ sessions).");
   } else {
     const items = r.proposal.map((p) => `${safe(p.type === "mcp_server" ? `mcp:${p.match}` : p.match)} (${p.reads} reads, ${p.sessions} sessions)`);
-    L.push(`  Promote to trusted? ${items.join("; ")}`, "  Run: pvg trust accept");
+    L.push(`  Promote to trusted? ${items.join("; ")}`, "  Run: lineage trust accept");
   }
   return `${L.join("\n")}\n`;
 }

@@ -55,8 +55,8 @@ test("tool events", () => {
   assert.ok(read?.kind === "ingest" && read.sourceKind === "file" && read.sourceId === "/repo/README.md" && read.text === "readme text");
   const web = post("WebFetch", { url: "https://a.example/x", prompt: "summarize" }, { result: "page" });
   assert.ok(web?.kind === "ingest" && web.sourceKind === "web" && web.sourceId === "https://a.example/x" && web.text === "page");
-  const search = post("WebSearch", { query: "pvg" }, "results");
-  assert.ok(search?.kind === "ingest" && search.sourceId === "search:pvg");
+  const search = post("WebSearch", { query: "lineage" }, "results");
+  assert.ok(search?.kind === "ingest" && search.sourceId === "search:lineage");
   const mcp = post("mcp__github__get_issue", { number: 3 }, { body: "issue body" });
   assert.ok(mcp?.kind === "ingest" && mcp.sourceKind === "mcp" && mcp.sourceId === "mcp:github/get_issue");
   const bash = post("Bash", { command: "curl -s https://a.example" }, { stdout: "out", stderr: "" });

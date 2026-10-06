@@ -52,11 +52,11 @@ export function hooksInstalled(s: Settings, command: string): boolean {
 }
 
 export function addHooks(s: Settings, command: string): Settings {
-  // Start by removing any existing pvg hooks to repair tampered installations
+  // Start by removing any existing lineage hooks to repair tampered installations
   const cleaned = removeHooks(s, command);
   const hooks: Record<string, MatcherGroup[]> = { ...(cleaned.hooks ?? {}) };
 
-  // Add fresh pvg group for each event
+  // Add fresh lineage group for each event
   for (const ev of HOOK_EVENTS) {
     const groups = [...(hooks[ev] ?? [])];
     const entry: HookCommand = { type: "command", command, timeout: HOOK_TIMEOUT_SECONDS };
@@ -96,7 +96,7 @@ export function removeDenyRule(s: Settings, rule: string): Settings {
 export function writeSettingsWithBackup(path: string, s: Settings, now: Date): string | null {
   let backup: string | null = null;
   if (existsSync(path)) {
-    backup = `${path}.pvg-backup-${now.toISOString().replace(/[:.]/g, "-")}`;
+    backup = `${path}.lineage-backup-${now.toISOString().replace(/[:.]/g, "-")}`;
     copyFileSync(path, backup);
   }
   mkdirSync(dirname(path), { recursive: true });

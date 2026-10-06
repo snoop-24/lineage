@@ -14,7 +14,7 @@ const NOW = new Date("2026-10-02T12:00:00Z");
 function setup() {
   const t = tempDir();
   const home = join(t.path, "home");
-  const env: Env = { home, dataDir: join(home, ".pvg"), claudeSettingsPath: join(home, ".claude", "settings.json") };
+  const env: Env = { home, dataDir: join(home, ".lineage"), claudeSettingsPath: join(home, ".claude", "settings.json") };
   mkdirSync(join(home, ".claude"), { recursive: true });
   writeFileSync(env.claudeSettingsPath, JSON.stringify({ model: "opus", hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "my-linter" }] }] } }));
   writeFileSync(join(home, ".claude", "CLAUDE.md"), "user rules\n");
@@ -59,10 +59,10 @@ test("protect-data, re-init with a new command, uninstall, purge", () => {
   const { t, env } = setup();
   try {
     runInit(env, opts({ protectData: true }));
-    assert.ok(readSettings(env.claudeSettingsPath).permissions?.deny?.includes("Edit(~/.pvg/**)"));
+    assert.ok(readSettings(env.claudeSettingsPath).permissions?.deny?.includes("Edit(~/.lineage/**)"));
     const CMD2 = "'/usr/bin/node' --no-warnings '/y/cli.js' hook";
     const r2 = runInit(env, opts({ command: CMD2 }));
-    assert.ok(r2.changes.includes("replace previous pvg hook command"));
+    assert.ok(r2.changes.includes("replace previous lineage hook command"));
     const s2 = readSettings(env.claudeSettingsPath);
     assert.ok(hooksInstalled(s2, CMD2));
     assert.ok(!JSON.stringify(s2).includes("/x/cli.js"));
@@ -71,7 +71,7 @@ test("protect-data, re-init with a new command, uninstall, purge", () => {
     const s3 = readSettings(env.claudeSettingsPath);
     assert.equal(hooksInstalled(s3, CMD2), false);
     assert.equal(s3.hooks?.PostToolUse?.[0]?.hooks[0]?.command, "my-linter");
-    assert.ok(!s3.permissions?.deny?.includes("Edit(~/.pvg/**)"));
+    assert.ok(!s3.permissions?.deny?.includes("Edit(~/.lineage/**)"));
     assert.equal(loadConfig(configPath(env.dataDir)).installedCommand, null);
     const p = runUninstall(env, { purge: true, now: NOW });
     assert.equal(p.removed, false);
@@ -83,10 +83,10 @@ test("protect-data, re-init with a new command, uninstall, purge", () => {
 
 test("hook command quoting, env prefix, deny rule paths", () => {
   assert.equal(
-    buildHookCommand("/n o/node", "/a'b/cli.js", { PVG_DATA_DIR: "/d" }),
-    "PVG_DATA_DIR='/d' '/n o/node' --no-warnings '/a'\\''b/cli.js' hook",
+    buildHookCommand("/n o/node", "/a'b/cli.js", { LINEAGE_DATA_DIR: "/d" }),
+    "LINEAGE_DATA_DIR='/d' '/n o/node' --no-warnings '/a'\\''b/cli.js' hook",
   );
-  assert.equal(denyRuleFor({ home: "/h", dataDir: "/h/.pvg", claudeSettingsPath: "" }), "Edit(~/.pvg/**)");
+  assert.equal(denyRuleFor({ home: "/h", dataDir: "/h/.lineage", claudeSettingsPath: "" }), "Edit(~/.lineage/**)");
   assert.equal(denyRuleFor({ home: "/h", dataDir: "/tmp/x", claudeSettingsPath: "" }), "Edit(//tmp/x/**)");
 });
 
@@ -96,7 +96,7 @@ test("initCli prints changes and the protect-data recommendation", () => {
     const r = initCli([], env, NOW, "/x/cli.js");
     assert.equal(r.code, 0);
     assert.match(r.out, /add PostToolUse hook/);
-    assert.match(r.out, /pvg init --protect-data/);
+    assert.match(r.out, /lineage init --protect-data/);
     assert.equal(initCli(["--nope"], env, NOW, "/x/cli.js").code, 2);
   } finally {
     t.cleanup();
@@ -111,8 +111,8 @@ test("tampered install: broken matcher is detected and repaired", () => {
     let s = readSettings(env.claudeSettingsPath);
     assert.ok(hooksInstalled(s, CMD));
 
-    // Tamper: change the pvg PostToolUse group's matcher to something wrong
-    // The pvg group is at index 1 (after the pre-existing "my-linter" group at index 0)
+    // Tamper: change the lineage PostToolUse group's matcher to something wrong
+    // The lineage group is at index 1 (after the pre-existing "my-linter" group at index 0)
     s.hooks!.PostToolUse![1]!.matcher = "NoSuchTool";
     writeFileSync(env.claudeSettingsPath, JSON.stringify(s, null, 2) + "\n");
 
@@ -154,11 +154,11 @@ test("init/uninstall round trip restores original settings with protect-data", (
 test("uninstall keeps user's existing deny rules", () => {
   const { t, env } = setup();
   try {
-    // Start with user's own deny rule (not the pvg rule)
+    // Start with user's own deny rule (not the lineage rule)
     writeFileSync(env.claudeSettingsPath, JSON.stringify({
       model: "opus",
       hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "my-linter" }] }] },
-      permissions: { deny: ["Edit(~/.private/**)", "Edit(~/.pvg/**)"] }
+      permissions: { deny: ["Edit(~/.private/**)", "Edit(~/.lineage/**)"] }
     }) + "\n");
 
     // Init without protect-data
@@ -172,7 +172,7 @@ test("uninstall keeps user's existing deny rules", () => {
 
     // User's rules stay untouched
     assert.ok(s.permissions?.deny?.includes("Edit(~/.private/**)"));
-    assert.ok(s.permissions?.deny?.includes("Edit(~/.pvg/**)"));
+    assert.ok(s.permissions?.deny?.includes("Edit(~/.lineage/**)"));
   } finally {
     t.cleanup();
   }
@@ -185,7 +185,7 @@ test("uninstall with missing config: pattern-based fallback removes hooks", () =
     runInit(env, opts());
     assert.ok(hooksInstalled(readSettings(env.claudeSettingsPath), CMD));
 
-    // Delete the config file (simulate lost or deleted ~/.pvg)
+    // Delete the config file (simulate lost or deleted ~/.lineage)
     rmSync(env.dataDir, { recursive: true, force: true });
     assert.equal(existsSync(env.dataDir), false);
 
@@ -215,7 +215,7 @@ test("purge refuses dangerous paths", () => {
     // Attempting to purge should throw
     assert.throws(
       () => runUninstall(dangerousEnv, { purge: true, now: NOW }),
-      /refusing to purge.*not a pvg data directory/
+      /refusing to purge.*not a lineage data directory/
     );
 
     // Home directory should still exist
@@ -276,11 +276,11 @@ test("refused purge leaves settings untouched", () => {
 test("user's pre-existing deny rules survive protect-data logic", () => {
   const { t, env } = setup();
   try {
-    // Start with user's own deny rule (not the pvg rule)
+    // Start with user's own deny rule (not the lineage rule)
     writeFileSync(env.claudeSettingsPath, JSON.stringify({
       model: "opus",
       hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "my-linter" }] }] },
-      permissions: { deny: ["Edit(~/.pvg/**)"] }
+      permissions: { deny: ["Edit(~/.lineage/**)"] }
     }) + "\n");
 
     // Init with protect-data: should detect rule already exists
@@ -291,7 +291,7 @@ test("user's pre-existing deny rules survive protect-data logic", () => {
     // Uninstall: the rule should stay (because we didn't add it)
     runUninstall(env, { purge: false, now: NOW });
     const s = readSettings(env.claudeSettingsPath);
-    assert.ok(s.permissions?.deny?.includes("Edit(~/.pvg/**)"));
+    assert.ok(s.permissions?.deny?.includes("Edit(~/.lineage/**)"));
   } finally {
     t.cleanup();
   }
@@ -321,7 +321,7 @@ test("user's pre-existing empty permissions object survives", () => {
   }
 });
 
-test("F2: purge refuses a data dir holding non-pvg files; settings and dir untouched", () => {
+test("F2: purge refuses a data dir holding non-lineage files; settings and dir untouched", () => {
   const { t, env } = setup();
   try {
     runInit(env, opts({ protectData: true }));
@@ -333,26 +333,26 @@ test("F2: purge refuses a data dir holding non-pvg files; settings and dir untou
     );
     assert.equal(readFileSync(env.claudeSettingsPath, "utf8"), before);
     assert.ok(existsSync(join(env.dataDir, "notes.txt")));
-    assert.ok(existsSync(join(env.dataDir, "pvg.db")));
+    assert.ok(existsSync(join(env.dataDir, "lineage.db")));
     assert.equal(loadConfig(configPath(env.dataDir)).installedCommand, CMD);
   } finally {
     t.cleanup();
   }
 });
 
-test("F2: purge refuses a directory without pvg.db or config.json", () => {
+test("F2: purge refuses a directory without lineage.db or config.json", () => {
   const { t, env } = setup();
   try {
     mkdirSync(env.dataDir);
     writeFileSync(join(env.dataDir, "errors.log"), "x\n");
-    assert.throws(() => runUninstall(env, { purge: true, now: NOW }), /refusing to purge.*not a pvg data directory/);
+    assert.throws(() => runUninstall(env, { purge: true, now: NOW }), /refusing to purge.*not a lineage data directory/);
     assert.ok(existsSync(join(env.dataDir, "errors.log")));
   } finally {
     t.cleanup();
   }
 });
 
-test("F2: purge deletes a normal pvg data dir; a missing data dir is a no-op", () => {
+test("F2: purge deletes a normal lineage data dir; a missing data dir is a no-op", () => {
   const { t, env } = setup();
   try {
     runInit(env, opts());

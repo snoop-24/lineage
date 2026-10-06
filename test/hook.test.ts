@@ -70,7 +70,7 @@ test("CLI hook exits 0 and prints nothing, even on garbage", () => {
     const r = spawnSync(process.execPath, ["--no-warnings", "src/cli.ts", "hook"], {
       input: "garbage",
       encoding: "utf8",
-      env: { ...process.env, PVG_DATA_DIR: join(t.path, "data"), PVG_HOME_DIR: join(t.path, "home") },
+      env: { ...process.env, LINEAGE_DATA_DIR: join(t.path, "data"), LINEAGE_HOME_DIR: join(t.path, "home") },
     });
     assert.equal(r.status, 0);
     assert.equal(r.stdout, "");

@@ -33,7 +33,7 @@ test("buildReport + renderers", () => {
     assert.deepEqual(r.proposal, [{ type: "domain", match: "docs.python.org", reads: 3, sessions: 2 }]);
     const text = renderText(r);
     assert.match(text, /HEALTH WARNINGS/);
-    assert.match(text, /pvg init/);
+    assert.match(text, /lineage init/);
     assert.match(text, /\[MATCHED\] ~\/\.claude\/projects\/p\/memory\/MEMORY\.md/);
     assert.match(text, /indicator email:ops@acme-backup\.com in web https:\/\/acme-status\.example\/incident/);
     assert.match(text, /Promote to trusted\? docs\.python\.org \(3 reads, 2 sessions\)/);
@@ -168,7 +168,7 @@ test("F5: settings changes are reported separately and flagged only for hook or 
   const f = recorderFixture();
   try {
     const userSettings = join(f.home, ".claude", "settings.json");
-    writeFileSync(userSettings, `{\n  "permissions": {\n    "deny": ["Edit(~/.pvg/**)"]\n  }\n}\n`);
+    writeFileSync(userSettings, `{\n  "permissions": {\n    "deny": ["Edit(~/.lineage/**)"]\n  }\n}\n`);
     populate(f);
     const local = join(f.proj, ".claude", "settings.local.json");
     const shared = join(f.proj, ".claude", "settings.json");
@@ -192,7 +192,7 @@ test("F5: settings changes are reported separately and flagged only for hook or 
     assert.ok(section.includes(`"allow": ["Bash(npm test)"]`), section);
     assert.ok(section.includes(`\n  ! ${shared}\n`), section);
     assert.ok(section.includes(`\n  ! ~/.claude/settings.json\n`), section);
-    assert.ok(section.includes(`    -     "deny": ["Edit(~/.pvg/**)"]`), section);
+    assert.ok(section.includes(`    -     "deny": ["Edit(~/.lineage/**)"]`), section);
     assert.doesNotMatch(text.slice(0, text.indexOf("SETTINGS CHANGES")), /settings(\.local)?\.json/);
     const json = JSON.parse(reportJson(r)) as { changes: unknown[]; settingsChanges: Array<{ surfacePath: string; flagged: boolean }> };
     assert.equal(json.changes.length, 1);

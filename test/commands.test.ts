@@ -215,7 +215,7 @@ test("trust accept refuses to write when trust.json is invalid", () => {
 });
 
 function installFake(env: Env, nodePath: string, cliPath: string): void {
-  const command = buildHookCommand(nodePath, cliPath, { PVG_DATA_DIR: env.dataDir });
+  const command = buildHookCommand(nodePath, cliPath, { LINEAGE_DATA_DIR: env.dataDir });
   mkdirSync(dirname(env.claudeSettingsPath), { recursive: true });
   writeFileSync(env.claudeSettingsPath, JSON.stringify(addHooks({}, command)));
   saveConfig(configPath(env.dataDir), { ...DEFAULT_CONFIG, installedCommand: command });
@@ -227,7 +227,7 @@ test("F8: status warns when the hook command points to missing paths and when re
     installFake(env, join(f.home, "gone", "node"), join(f.home, "gone", "it's", "cli.js"));
     const out = runStatus(env, new Date("2026-10-20T00:00:00Z")).out;
     assert.match(out, /Hooks installed: yes/);
-    assert.match(out, /WARNING: hook command points to a missing Node or CLI path; re-run pvg init/);
+    assert.match(out, /WARNING: hook command points to a missing Node or CLI path; re-run lineage init/);
     assert.match(out, /WARNING: no events recorded in 17 days — is recording working\?/);
   } finally {
     f.cleanup();
@@ -249,7 +249,7 @@ test("F8: no status warnings when hook paths exist and events are recent", () =>
 });
 
 test("F8: hookCommandPaths parses quoted node and CLI paths", () => {
-  assert.deepEqual(hookCommandPaths(buildHookCommand("/n o/node", "/a'b/cli.js", { PVG_DATA_DIR: "/d x", PVG_HOME_DIR: "/h" })), { node: "/n o/node", cli: "/a'b/cli.js" });
+  assert.deepEqual(hookCommandPaths(buildHookCommand("/n o/node", "/a'b/cli.js", { LINEAGE_DATA_DIR: "/d x", LINEAGE_HOME_DIR: "/h" })), { node: "/n o/node", cli: "/a'b/cli.js" });
   assert.deepEqual(hookCommandPaths("'/usr/bin/node' --no-warnings '/x/cli.js' hook"), { node: "/usr/bin/node", cli: "/x/cli.js" });
   assert.equal(hookCommandPaths("my-linter"), null);
 });

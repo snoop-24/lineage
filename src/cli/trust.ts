@@ -9,7 +9,7 @@ import {
 import { dbPath, ensureDataDir, resolveEnv, trustPath, type Env } from "../paths.ts";
 import { emit, ok, usage, type CmdResult } from "./result.ts";
 
-const ADD_USAGE = "Usage: pvg trust add <source> --tier <trusted|dependency|external>";
+const ADD_USAGE = "Usage: lineage trust add <source> --tier <trusted|dependency|external>";
 const TRUST_JSON_INVALID_MSG = "trust.json is not valid JSON; fix or delete it before changing trust rules";
 
 export function trustFileInvalid(path: string): boolean {
@@ -57,7 +57,7 @@ export function runTrust(args: string[], env: Env, now: Date = new Date()): CmdR
     }
     const proposals = currentProposals(env, now);
     if (proposals.length > 0) {
-      L.push("Proposed (run `pvg trust accept`):");
+      L.push("Proposed (run `lineage trust accept`):");
       for (const p of proposals) L.push(`  ${p.type} ${p.match} (${p.reads} reads, ${p.sessions} sessions)`);
     }
     return ok(L);
@@ -82,7 +82,7 @@ export function runTrust(args: string[], env: Env, now: Date = new Date()): CmdR
 
   if (sub === "remove") {
     const source = rest[0];
-    if (!source) return usage("Usage: pvg trust remove <source>");
+    if (!source) return usage("Usage: lineage trust remove <source>");
     if (trustFileInvalid(path)) return { code: 1, out: "", err: `${TRUST_JSON_INVALID_MSG}\n` };
     const key = inferRule(source);
     const r = removeRule(loadTrust(path), key.type, key.match);

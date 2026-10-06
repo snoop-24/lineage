@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Store } from "../src/core/store.ts";
 import type { RecorderDeps } from "../src/core/recorder.ts";
 
-export function tempDir(prefix = "pvg-test-"): { path: string; cleanup: () => void } {
+export function tempDir(prefix = "lineage-test-"): { path: string; cleanup: () => void } {
   const path = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   return { path, cleanup: () => rmSync(path, { recursive: true, force: true }) };
 }

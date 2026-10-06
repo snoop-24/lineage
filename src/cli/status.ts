@@ -24,7 +24,7 @@ export function hookCommandPaths(command: string): { node: string; cli: string }
 const TRUST_JSON_INVALID_MSG = "Trust rules: WARNING: trust.json is not valid JSON; your trust rules are not being applied (fix or delete it)";
 
 export function runStatus(env: Env, now: Date = new Date()): CmdResult {
-  const L: string[] = [`pvg ${VERSION}`];
+  const L: string[] = [`lineage ${VERSION}`];
   const cfg = loadConfig(configPath(env.dataDir));
   let settings: Settings = {};
   let settingsReadable = true;
@@ -36,10 +36,10 @@ export function runStatus(env: Env, now: Date = new Date()): CmdResult {
   const installed = cfg.installedCommand !== null && hooksInstalled(settings, cfg.installedCommand);
   L.push(`Data directory: ${tilde(env.dataDir, env.home)}`);
   L.push(`Claude Code settings: ${tilde(env.claudeSettingsPath, env.home)}${settingsReadable ? "" : " (not valid JSON)"}`);
-  L.push(`Hooks installed: ${installed ? "yes" : "no (run: pvg init)"}`);
+  L.push(`Hooks installed: ${installed ? "yes" : "no (run: lineage init)"}`);
   const paths = installed && cfg.installedCommand ? hookCommandPaths(cfg.installedCommand) : null;
   if (paths && (!existsSync(paths.node) || !existsSync(paths.cli))) {
-    L.push("WARNING: hook command points to a missing Node or CLI path; re-run pvg init");
+    L.push("WARNING: hook command points to a missing Node or CLI path; re-run lineage init");
   }
   if (existsSync(dbPath(env.dataDir))) {
     const store = Store.open(env.dataDir);
@@ -57,10 +57,10 @@ export function runStatus(env: Env, now: Date = new Date()): CmdResult {
       L.push(
         chain.ok
           ? `Log integrity: OK (${chain.count} events)`
-          : `Log integrity: BROKEN at event #${chain.brokenAtId ?? "?"}: the log was edited outside pvg`,
+          : `Log integrity: BROKEN at event #${chain.brokenAtId ?? "?"}: the log was edited outside lineage`,
       );
       const tamper = store.listEvents({ kind: "tamper" }).length;
-      if (tamper > 0) L.push(`Tamper events: ${tamper} (pvg hooks were removed or changed while Claude Code was running)`);
+      if (tamper > 0) L.push(`Tamper events: ${tamper} (lineage hooks were removed or changed while Claude Code was running)`);
     } finally {
       store.close();
     }

@@ -100,7 +100,7 @@ export function record(ev: CommonEvent, d: RecorderDeps): void {
       d.store.insertEvent(newEvent(ev, { kind: "config_change", blobSha: blob.sha }));
       if (d.installedCommand && !hooksInstalled(safeReadSettings(d.settingsPath), d.installedCommand)) {
         d.store.insertEvent(
-          newEvent(ev, { kind: "tamper", detail: { reason: "pvg hook entries missing from Claude Code settings", settingsPath: d.settingsPath } }),
+          newEvent(ev, { kind: "tamper", detail: { reason: "lineage hook entries missing from Claude Code settings", settingsPath: d.settingsPath } }),
         );
       }
       return;
@@ -205,7 +205,7 @@ function trackImports(fromPath: string, text: string, ev: CommonEvent, d: Record
   }
 }
 
-// Used by `pvg init` to baseline user-level surfaces before any session runs. Silent: no events.
+// Used by `lineage init` to baseline user-level surfaces before any session runs. Silent: no events.
 export function baseline(targets: SurfaceTarget[], store: Store, ts: string): number {
   let n = 0;
   for (const t of targets) {

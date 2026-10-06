@@ -9,11 +9,11 @@ export interface Env {
 }
 
 export function resolveEnv(env: NodeJS.ProcessEnv = process.env): Env {
-  const home = env.PVG_HOME_DIR ?? homedir();
+  const home = env.LINEAGE_HOME_DIR ?? homedir();
   return {
     home,
-    dataDir: env.PVG_DATA_DIR ?? join(home, ".pvg"),
-    claudeSettingsPath: env.PVG_CLAUDE_SETTINGS ?? join(home, ".claude", "settings.json"),
+    dataDir: env.LINEAGE_DATA_DIR ?? join(home, ".lineage"),
+    claudeSettingsPath: env.LINEAGE_CLAUDE_SETTINGS ?? join(home, ".claude", "settings.json"),
   };
 }
 
@@ -22,7 +22,7 @@ export function ensureDataDir(dataDir: string): void {
   chmodSync(dataDir, 0o700);
 }
 
-export const dbPath = (dataDir: string): string => join(dataDir, "pvg.db");
+export const dbPath = (dataDir: string): string => join(dataDir, "lineage.db");
 export const errorLogPath = (dataDir: string): string => join(dataDir, "errors.log");
 export const configPath = (dataDir: string): string => join(dataDir, "config.json");
 export const trustPath = (dataDir: string): string => join(dataDir, "trust.json");

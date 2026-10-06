@@ -8,16 +8,16 @@ import { loadConfig, saveConfig, DEFAULT_CONFIG } from "../src/config.ts";
 import { tempDir } from "./helpers.ts";
 
 test("resolveEnv uses overrides", () => {
-  const env = resolveEnv({ PVG_HOME_DIR: "/h", PVG_DATA_DIR: "/d", PVG_CLAUDE_SETTINGS: "/s.json" });
+  const env = resolveEnv({ LINEAGE_HOME_DIR: "/h", LINEAGE_DATA_DIR: "/d", LINEAGE_CLAUDE_SETTINGS: "/s.json" });
   assert.deepEqual(env, { home: "/h", dataDir: "/d", claudeSettingsPath: "/s.json" });
 });
 
 test("resolveEnv defaults under home", () => {
-  const env = resolveEnv({ PVG_HOME_DIR: "/h" });
-  assert.equal(env.dataDir, "/h/.pvg");
+  const env = resolveEnv({ LINEAGE_HOME_DIR: "/h" });
+  assert.equal(env.dataDir, "/h/.lineage");
   assert.equal(env.claudeSettingsPath, "/h/.claude/settings.json");
-  assert.equal(dbPath(env.dataDir), "/h/.pvg/pvg.db");
-  assert.equal(trustPath(env.dataDir), "/h/.pvg/trust.json");
+  assert.equal(dbPath(env.dataDir), "/h/.lineage/lineage.db");
+  assert.equal(trustPath(env.dataDir), "/h/.lineage/trust.json");
 });
 
 test("sha256 matches known vector", () => {

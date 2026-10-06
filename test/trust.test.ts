@@ -182,8 +182,8 @@ test("F6: only your own ~/.claude agent files and CLAUDE.md files above the proj
   assert.equal(defaultTier("file", "/h/.claude/projects/p/transcript.jsonl", proj, home), "T4");
   assert.equal(defaultTier("file", "/h/.claude/settings.json", proj, home), "T4");
   // Unknown project root: no ancestors are trusted
-  assert.equal(defaultTier("file", "/CLAUDE.md", "/\u0000pvg-unknown-root", home), "T4");
-  assert.equal(defaultTier("file", "/h/.claude/CLAUDE.md", "/\u0000pvg-unknown-root", home), "T1");
+  assert.equal(defaultTier("file", "/CLAUDE.md", "/\u0000lineage-unknown-root", home), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/CLAUDE.md", "/\u0000lineage-unknown-root", home), "T1");
   // Your rules can still demote trusted files
   const demote: TrustConfig = { rules: [{ type: "path", match: "/h/work/**", tier: "T4" }] };
   assert.equal(classify("file", "/h/work/CLAUDE.md", proj, demote, home), "T4");

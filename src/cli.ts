@@ -11,15 +11,15 @@ process.umask(0o077);
 
 type Command = (args: string[]) => Promise<number>;
 
-const HELP = `pvg — memory provenance for coding agents (v${VERSION}, observe and report)
+const HELP = `lineage — memory provenance for coding agents (v${VERSION}, observe and report)
 
 Usage:
-  pvg init [--dry-run] [--protect-data]   Install Claude Code hooks (backs up settings first)
-  pvg uninstall [--purge]                 Remove pvg hooks (and, with --purge, all pvg data)
-  pvg report [--since 7d] [--project <dir>] [--md <file>] [--json]
-  pvg trust list | add <source> --tier <tier> | remove <source> | accept
-  pvg status                              Install health, log integrity, errors
-  pvg log [--session <id>] [--kind <kind>] [--limit <n>]
+  lineage init [--dry-run] [--protect-data]   Install Claude Code hooks (backs up settings first)
+  lineage uninstall [--purge]                 Remove lineage hooks (and, with --purge, all lineage data)
+  lineage report [--since 7d] [--project <dir>] [--md <file>] [--json]
+  lineage trust list | add <source> --tier <tier> | remove <source> | accept
+  lineage status                              Install health, log integrity, errors
+  lineage log [--session <id>] [--kind <kind>] [--limit <n>]
 `;
 
 const commands: Record<string, Command> = {

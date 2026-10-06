@@ -14,7 +14,7 @@ const p95 = (xs: number[]): number => {
 };
 
 const HOOK_RUNS = 30;
-const t = tempDir("pvg-bench-");
+const t = tempDir("lineage-bench-");
 try {
   const home = join(t.path, "home");
   const proj = join(t.path, "proj");
@@ -27,7 +27,7 @@ try {
   writeFileSync(join(proj, "CLAUDE.md"), "# Bench\n");
   for (let i = 0; i < 40; i++) writeFileSync(join(proj, ".claude", "rules", `rule-${i}.md`), `rule ${i}\n`);
 
-  const env = { ...process.env, PVG_DATA_DIR: data, PVG_HOME_DIR: home, PVG_CLAUDE_SETTINGS: join(home, ".claude", "settings.json") };
+  const env = { ...process.env, LINEAGE_DATA_DIR: data, LINEAGE_HOME_DIR: home, LINEAGE_CLAUDE_SETTINGS: join(home, ".claude", "settings.json") };
   const transcript = join(projDir, "bench.jsonl");
   const send = (payload: object) =>
     spawnSync(process.execPath, ["--no-warnings", "dist/cli.js", "hook"], { input: JSON.stringify(payload), env, encoding: "utf8" });

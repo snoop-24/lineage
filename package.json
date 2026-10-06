@@ -1,9 +1,9 @@
 {
-  "name": "provenance-guard",
+  "name": "agent-lineage",
   "version": "0.1.0",
   "description": "Memory provenance for coding agents: observe and report where your agents' memory came from.",
   "type": "module",
-  "bin": { "pvg": "dist/cli.js" },
+  "bin": { "lineage": "dist/cli.js" },
   "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": ">=22.13" },
   "scripts": {

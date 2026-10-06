@@ -35,16 +35,16 @@ export function defaultCliPath(): string {
   return fileURLToPath(new URL(`../cli${ext}`, import.meta.url));
 }
 
-export function pvgEnvVars(processEnv: NodeJS.ProcessEnv): Record<string, string> {
+export function lineageEnvVars(processEnv: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const k of ["PVG_DATA_DIR", "PVG_HOME_DIR", "PVG_CLAUDE_SETTINGS"]) {
+  for (const k of ["LINEAGE_DATA_DIR", "LINEAGE_HOME_DIR", "LINEAGE_CLAUDE_SETTINGS"]) {
     const v = processEnv[k];
     if (v) out[k] = v;
   }
   return out;
 }
 
-export const PVG_HOOK_PATTERN = /--no-warnings '[^']*\/cli\.(?:js|ts)' hook$/;
+export const LINEAGE_HOOK_PATTERN = /--no-warnings '[^']*\/cli\.(?:js|ts)' hook$/;
 
 function cleanupEmptyPermissions(s: { permissions?: { deny?: string[]; [k: string]: unknown }; [k: string]: unknown }): void {
   if (s.permissions?.deny?.length === 0) {
@@ -77,7 +77,7 @@ export function runInit(env: Env, o: InitOptions): InitResult {
   let base = settings;
   if (cfg.installedCommand && cfg.installedCommand !== o.command) {
     base = removeHooks(base, cfg.installedCommand);
-    changes.push("replace previous pvg hook command");
+    changes.push("replace previous lineage hook command");
   }
   for (const ev of HOOK_EVENTS) {
     const present = hookInstalledFor(base, ev, o.command);
@@ -118,25 +118,25 @@ export interface UninstallResult {
   message: string;
 }
 
-const PVG_OWNED_ENTRIES = new Set(["pvg.db", "pvg.db-wal", "pvg.db-shm", "config.json", "trust.json", "errors.log"]);
+const LINEAGE_OWNED_ENTRIES = new Set(["lineage.db", "lineage.db-wal", "lineage.db-shm", "config.json", "trust.json", "errors.log"]);
 
 // Returns true when dataDir exists and is safe to delete; false when it does not exist; throws otherwise.
 function checkPurgeTarget(env: Env): boolean {
   const resolved = resolve(env.dataDir);
   if (resolved === resolve(env.home) || resolved === "/") {
-    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory`);
+    throw new Error(`refusing to purge ${env.dataDir}: not a lineage data directory`);
   }
   if (!existsSync(env.dataDir)) return false;
   if (!statSync(env.dataDir).isDirectory()) {
-    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory (not a directory)`);
+    throw new Error(`refusing to purge ${env.dataDir}: not a lineage data directory (not a directory)`);
   }
   const entries = readdirSync(env.dataDir).sort();
-  const unexpected = entries.find((name) => !PVG_OWNED_ENTRIES.has(name));
+  const unexpected = entries.find((name) => !LINEAGE_OWNED_ENTRIES.has(name));
   if (unexpected !== undefined) {
-    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory (unexpected entry "${unexpected}")`);
+    throw new Error(`refusing to purge ${env.dataDir}: not a lineage data directory (unexpected entry "${unexpected}")`);
   }
-  if (!entries.includes("pvg.db") && !entries.includes("config.json")) {
-    throw new Error(`refusing to purge ${env.dataDir}: not a pvg data directory (no pvg.db or config.json)`);
+  if (!entries.includes("lineage.db") && !entries.includes("config.json")) {
+    throw new Error(`refusing to purge ${env.dataDir}: not a lineage data directory (no lineage.db or config.json)`);
   }
   return true;
 }
@@ -175,7 +175,7 @@ export function runUninstall(env: Env, o: { purge: boolean; now: Date }): Uninst
     for (const groups of Object.values(settings.hooks ?? {})) {
       for (const g of groups) {
         for (const h of g.hooks ?? []) {
-          if (h.type === "command" && h.command && PVG_HOOK_PATTERN.test(h.command)) {
+          if (h.type === "command" && h.command && LINEAGE_HOOK_PATTERN.test(h.command)) {
             commands.add(h.command);
           }
         }
@@ -205,23 +205,23 @@ export function runUninstall(env: Env, o: { purge: boolean; now: Date }): Uninst
   let message: string;
   if (removed) {
     if (cfg.installedCommand) {
-      message = "Removed pvg hooks from Claude Code settings.";
+      message = "Removed lineage hooks from Claude Code settings.";
     } else {
       const commands = new Set<string>();
       for (const groups of Object.values(settings.hooks ?? {})) {
         for (const g of groups) {
           for (const h of g.hooks ?? []) {
-            if (h.type === "command" && h.command && PVG_HOOK_PATTERN.test(h.command)) {
+            if (h.type === "command" && h.command && LINEAGE_HOOK_PATTERN.test(h.command)) {
               commands.add(h.command);
             }
           }
         }
       }
       const suffix = commands.size === 1 ? "y" : "ies";
-      message = `Removed ${commands.size} pvg hook entr${suffix} found by pattern (pvg config was missing).`;
+      message = `Removed ${commands.size} lineage hook entr${suffix} found by pattern (lineage config was missing).`;
     }
   } else {
-    message = "pvg hooks were not installed.";
+    message = "lineage hooks were not installed.";
   }
 
   return {
@@ -249,24 +249,24 @@ export function initCli(args: string[], env: Env, now: Date = new Date(), cliPat
   }
   const dryRun = parsed.values["dry-run"] === true;
   const protectData = parsed.values["protect-data"] === true;
-  const command = buildHookCommand(process.execPath, cliPath, pvgEnvVars(process.env));
+  const command = buildHookCommand(process.execPath, cliPath, lineageEnvVars(process.env));
   let r: InitResult;
   try {
     r = runInit(env, { dryRun, protectData, command, now, platform: process.platform });
   } catch (e) {
-    return { code: 1, out: "", err: `pvg init failed: ${(e as Error).message}\n` };
+    return { code: 1, out: "", err: `lineage init failed: ${(e as Error).message}\n` };
   }
   const L: string[] = [];
-  if (dryRun) L.push("pvg init (dry run: no files changed)");
+  if (dryRun) L.push("lineage init (dry run: no files changed)");
   L.push(`Changes to ${env.claudeSettingsPath}:`);
-  if (r.changes.length === 0) L.push("  No changes: pvg hooks are already installed.");
+  if (r.changes.length === 0) L.push("  No changes: lineage hooks are already installed.");
   for (const c of r.changes) L.push(`  - ${c}`);
   if (r.backupPath) L.push(`Backup of previous settings: ${r.backupPath}`);
   if (!dryRun) L.push(`Baselined ${r.baselined} user-level memory/instruction file(s).`, `Data directory: ${env.dataDir}`);
   if (!protectData) {
-    L.push(`Recommended: run \`pvg init --protect-data\` to deny agents write access to ${env.dataDir} (adds Claude Code rule ${denyRuleFor(env)}).`);
+    L.push(`Recommended: run \`lineage init --protect-data\` to deny agents write access to ${env.dataDir} (adds Claude Code rule ${denyRuleFor(env)}).`);
   }
-  L.push("Next: use Claude Code as usual, then run `pvg report`. Remove anytime with `pvg uninstall`.");
+  L.push("Next: use Claude Code as usual, then run `lineage report`. Remove anytime with `lineage uninstall`.");
   return ok(L);
 }
 
@@ -285,11 +285,11 @@ export function uninstallCli(args: string[], env: Env, now: Date = new Date()): 
   try {
     r = runUninstall(env, { purge: parsed.values.purge === true, now });
   } catch (e) {
-    return { code: 1, out: "", err: `pvg uninstall failed: ${(e as Error).message}\n` };
+    return { code: 1, out: "", err: `lineage uninstall failed: ${(e as Error).message}\n` };
   }
   const L = [r.message];
   if (r.backupPath) L.push(`Backup of previous settings: ${r.backupPath}`);
-  if (r.purged) L.push(`Deleted pvg data directory ${env.dataDir}.`);
+  if (r.purged) L.push(`Deleted lineage data directory ${env.dataDir}.`);
   return ok(L);
 }
 

@@ -25,16 +25,16 @@ test("addHooks preserves user config, adds all events, is idempotent", () => {
   assert.deepEqual(twice, once);
 });
 
-test("removeHooks removes only pvg entries", () => {
+test("removeHooks removes only lineage entries", () => {
   const removed = removeHooks(addHooks(userSettings, CMD), CMD);
   assert.deepEqual(removed, userSettings);
   assert.deepEqual(removeHooks(addHooks({}, CMD), CMD), {});
 });
 
 test("deny rule add/remove", () => {
-  const withRule = addDenyRule(addDenyRule({}, "Edit(~/.pvg/**)"), "Edit(~/.pvg/**)");
-  assert.deepEqual(withRule.permissions?.deny, ["Edit(~/.pvg/**)"]);
-  assert.deepEqual(removeDenyRule(withRule, "Edit(~/.pvg/**)").permissions?.deny, []);
+  const withRule = addDenyRule(addDenyRule({}, "Edit(~/.lineage/**)"), "Edit(~/.lineage/**)");
+  assert.deepEqual(withRule.permissions?.deny, ["Edit(~/.lineage/**)"]);
+  assert.deepEqual(removeDenyRule(withRule, "Edit(~/.lineage/**)").permissions?.deny, []);
 });
 
 test("read/write with backup", () => {
@@ -62,12 +62,12 @@ test("hooksInstalled is false when matcher is altered or type is changed", () =>
   tamperedMatcher.hooks.PostToolUse[0].matcher = "NoSuchTool";
   assert.equal(hooksInstalled(tamperedMatcher, CMD), false, "should fail when PostToolUse matcher altered");
 
-  // (b) Any pvg entry's type changed to "prompt"
+  // (b) Any lineage entry's type changed to "prompt"
   const tamperedType = JSON.parse(JSON.stringify(original));
   tamperedType.hooks.PostToolUse[0].hooks[0].type = "prompt";
   assert.equal(hooksInstalled(tamperedType, CMD), false, "should fail when entry type altered");
 
-  // (c) matcher: "startup" added to SessionStart pvg group
+  // (c) matcher: "startup" added to SessionStart lineage group
   const tamperedSessionStart = JSON.parse(JSON.stringify(original));
   tamperedSessionStart.hooks.SessionStart[0].matcher = "startup";
   assert.equal(hooksInstalled(tamperedSessionStart, CMD), false, "should fail when SessionStart has matcher");
@@ -103,16 +103,16 @@ test("addHooks repairs tampered installations", () => {
   const repaired_c = addHooks(tampered, CMD);
   assert.equal(hooksInstalled(repaired_c, CMD), true, "should repair added matcher");
 
-  // Verify exactly one pvg entry per event after repair
+  // Verify exactly one lineage entry per event after repair
   for (const ev of HOOK_EVENTS) {
     const groups = repaired_c.hooks?.[ev] ?? [];
-    let pvgEntryCount = 0;
+    let lineageEntryCount = 0;
     for (const g of groups) {
       for (const h of g.hooks ?? []) {
-        if (h.command === CMD) pvgEntryCount++;
+        if (h.command === CMD) lineageEntryCount++;
       }
     }
-    assert.equal(pvgEntryCount, 1, `should have exactly one pvg entry for ${ev}`);
+    assert.equal(lineageEntryCount, 1, `should have exactly one lineage entry for ${ev}`);
   }
 });
 

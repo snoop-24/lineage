@@ -99,10 +99,10 @@ test("workspace reads keep indicators only; prompts and loads are stored", () =>
   }
 });
 
-test("config change records tamper when pvg hooks are missing", () => {
+test("config change records tamper when lineage hooks are missing", () => {
   const f = recorderFixture();
   try {
-    f.deps.installedCommand = "pvg-hook-command";
+    f.deps.installedCommand = "lineage-hook-command";
     record({ ...f.base("s1"), kind: "config_change", raw: "{}" }, f.deps);
     assert.equal(f.store.listEvents({ kind: "config_change" }).length, 1);
     assert.equal(f.store.listEvents({ kind: "tamper" }).length, 1);

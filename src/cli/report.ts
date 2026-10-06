@@ -6,7 +6,7 @@ import { loadTrust } from "../core/trust.ts";
 import { findProjectRoot } from "../core/project.ts";
 import { buildReport, renderMarkdown, renderText, reportJson, type ReportHealth } from "../core/report.ts";
 import { hooksInstalled, readSettings, type Settings } from "../claude-settings.ts";
-import { loadConfig, type PvgConfig } from "../config.ts";
+import { loadConfig, type LineageConfig } from "../config.ts";
 import { configPath, dbPath, errorLogPath, resolveEnv, trustPath, type Env } from "../paths.ts";
 import { emit, usage, type CmdResult } from "./result.ts";
 
@@ -23,7 +23,7 @@ export function countErrorLines(dataDir: string): number {
   return existsSync(p) ? readFileSync(p, "utf8").split("\n").filter((l) => l.length > 0).length : 0;
 }
 
-export function collectHealth(store: Store, env: Env, cfg: PvgConfig): ReportHealth {
+export function collectHealth(store: Store, env: Env, cfg: LineageConfig): ReportHealth {
   let settings: Settings = {};
   try {
     settings = readSettings(env.claudeSettingsPath);
@@ -61,7 +61,7 @@ export function runReport(args: string[], env: Env, now: Date = new Date()): Cmd
     return usage((e as Error).message);
   }
   if (!existsSync(dbPath(env.dataDir))) {
-    return { code: 1, out: "", err: "No data yet. Run `pvg init`, then use Claude Code for a while.\n" };
+    return { code: 1, out: "", err: "No data yet. Run `lineage init`, then use Claude Code for a while.\n" };
   }
   const cfg = loadConfig(configPath(env.dataDir));
   const store = Store.open(env.dataDir);
