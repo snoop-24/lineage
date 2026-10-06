@@ -2,6 +2,17 @@
 
 This demo shows pvg attributing a poisoned memory write to the page that caused it. It uses isolated settings and data paths, so your real `~/.claude/settings.json` and `~/.pvg` are untouched.
 
+## Try it yourself (interactive)
+
+```bash
+demo/sandbox.sh                                       # your default model
+demo/sandbox.sh --model claude-haiku-4-5-20251001     # a model more likely to fall for the page
+```
+
+This sets up an isolated pvg install, starts the poisoned page and opens Claude Code in a throwaway project. Ask it to read `http://127.0.0.1:8765/incident` and record important facts in `CLAUDE.md`, then type `/exit`: the script prints the new `CLAUDE.md` and pvg's report, then deletes the sandbox. Needs Node 24 and a logged-in `claude`; no `npm link` required.
+
+## Scripted run
+
 ```bash
 # from the repository root, after `npm install && npm run build && npm link`
 export PVG_DATA_DIR="$PWD/.capture/demo-data"
