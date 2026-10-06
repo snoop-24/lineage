@@ -18,7 +18,7 @@ cd - && pvg report --since 1h
 
 **What you should see:** a `[MATCHED]` entry for `CLAUDE.md` (printed in full with the temp project path) with evidence `indicator email:ops@acme-backup.com in network http://127.0.0.1:8765/incident`.
 
-**If the model refused to save the planted fact,** the report shows the untrusted fetch under EXPOSURE and no memory change. The model resisted this time. Model resistance is probabilistic, which is exactly why pvg records provenance either way.
+**If the model refused to save the planted fact,** which strong models often do, you will usually still see the incident summary it wrote labeled `[MATCHED]`, with evidence such as `indicator number:4721`: the note's content came from the untrusted page even though the planted contact did not. To watch the planted fact land, add `--model claude-haiku-4-5-20251001` to the `claude -p` command. Model resistance is probabilistic, which is exactly why pvg records provenance either way.
 
 Clean up by running **in the same shell** (with `PVG_DATA_DIR` and `PVG_CLAUDE_SETTINGS` still exported):
 
