@@ -72,26 +72,36 @@ export function mcpServer(sourceId: string): string | null {
   return server ? server : null;
 }
 
-const AGENT_FILE_BASENAMES = new Set(["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "SKILL.md"]);
+const ANCESTOR_INSTRUCTION_FILES = new Set(["CLAUDE.md", "CLAUDE.local.md"]);
 
-// The agent's own memory/instruction files: their writes are attributed when they happen, so reading them is trusted.
-function isAgentMemoryFile(path: string): boolean {
-  return (
-    AGENT_FILE_BASENAMES.has(basename(path)) ||
-    path.includes("/.claude/rules/") ||
-    path.includes("/.claude/skills/") ||
-    /\/\.claude\/projects\/[^/]+\/memory\//.test(path)
-  ); // ~/.claude/CLAUDE.md is covered by the basename check.
+function isWithin(dir: string, path: string): boolean {
+  const rel = relative(dir, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
-export function defaultTier(kind: SourceKind | "prompt", sourceId: string, projectRoot: string): Tier {
+// Your own memory/instruction files under ~/.claude: their writes are attributed when they happen, so reading them is trusted.
+// Anchored to home so third-party files that merely share these names stay untrusted.
+function isOwnAgentFile(path: string, home: string): boolean {
+  if (!isAbsolute(home)) return false;
+  const dir = join(home, ".claude");
+  if (!isWithin(dir, path)) return false;
+  const rel = relative(dir, path);
+  return rel === "CLAUDE.md" || rel.startsWith("rules/") || rel.startsWith("skills/") || /^projects\/[^/]+\/memory\//.test(rel);
+}
+
+// CLAUDE.md files in directories above the project, which Claude Code loads as instructions.
+function isAncestorInstructionFile(path: string, projectRoot: string): boolean {
+  if (projectRoot.includes("\u0000") || !ANCESTOR_INSTRUCTION_FILES.has(basename(path))) return false;
+  return isWithin(dirname(path), projectRoot);
+}
+
+export function defaultTier(kind: SourceKind | "prompt", sourceId: string, projectRoot: string, home: string): Tier {
   if (kind === "prompt") return "T0";
   if (kind === "file") {
-    if (isAgentMemoryFile(sourceId)) return "T1";
-    const rel = relative(projectRoot, sourceId);
-    const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-    if (!inside) return "T4";
-    return rel.split("/").some((seg) => DEP_DIRS.has(seg)) ? "T3" : "T1";
+    if (isWithin(projectRoot, sourceId)) {
+      return relative(projectRoot, sourceId).split("/").some((seg) => DEP_DIRS.has(seg)) ? "T3" : "T1";
+    }
+    return isOwnAgentFile(sourceId, home) || isAncestorInstructionFile(sourceId, projectRoot) ? "T1" : "T4";
   }
   return "T4";
 }
@@ -117,7 +127,7 @@ function maxTier(tiers: Tier[]): Tier {
 }
 
 export function classify(kind: SourceKind | "prompt", sourceId: string, projectRoot: string, cfg: TrustConfig, home: string): Tier {
-  const base = defaultTier(kind, sourceId, projectRoot);
+  const base = defaultTier(kind, sourceId, projectRoot, home);
   if (base === "T0") return base;
   const matches: Tier[] = cfg.rules.filter((r) => ruleMatches(r, kind, sourceId, home)).map((r) => r.tier);
   if (matches.length === 0) return base;

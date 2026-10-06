@@ -24,11 +24,11 @@ test("globToRegExp", () => {
 });
 
 test("default tiers", () => {
-  assert.equal(defaultTier("prompt", "x", root), "T0");
-  assert.equal(defaultTier("file", "/p/src/a.ts", root), "T1");
-  assert.equal(defaultTier("file", "/p/node_modules/x/README.md", root), "T3");
-  assert.equal(defaultTier("file", "/etc/hosts", root), "T4");
-  assert.equal(defaultTier("web", "https://a.example", root), "T4");
+  assert.equal(defaultTier("prompt", "x", root, home), "T0");
+  assert.equal(defaultTier("file", "/p/src/a.ts", root, home), "T1");
+  assert.equal(defaultTier("file", "/p/node_modules/x/README.md", root, home), "T3");
+  assert.equal(defaultTier("file", "/etc/hosts", root, home), "T4");
+  assert.equal(defaultTier("web", "https://a.example", root, home), "T4");
   assert.equal(classify("web", "https://a.example", root, none, home), "T4");
 });
 
@@ -154,18 +154,37 @@ test("inferRule extracts correct server and domain segments", () => {
   assert.deepEqual(inferRule("docs.python.org"), { type: "domain", match: "docs.python.org" });
 });
 
-test("F6: agent memory/instruction files read anywhere default to T1; other outside files stay T4", () => {
-  assert.equal(defaultTier("file", "/h/.claude/projects/p/memory/topic.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/elsewhere/AGENTS.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/elsewhere/CLAUDE.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/elsewhere/CLAUDE.local.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/h/.claude/skills/deploy/SKILL.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/h/.claude/skills/deploy/helper.sh", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/h/.claude/rules/style.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/h/.claude/CLAUDE.md", "/proj"), "T1");
-  assert.equal(defaultTier("file", "/elsewhere/README.md", "/proj"), "T4");
-  assert.equal(defaultTier("file", "/h/.claude/projects/p/transcript.jsonl", "/proj"), "T4");
-  assert.equal(defaultTier("file", "/h/.claude/settings.json", "/proj"), "T4");
-  const demote: TrustConfig = { rules: [{ type: "path", match: "/elsewhere/**", tier: "T4" }] };
-  assert.equal(classify("file", "/elsewhere/AGENTS.md", "/proj", demote, home), "T4");
+test("F6: only your own ~/.claude agent files and CLAUDE.md files above the project are trusted outside it", () => {
+  const proj = "/h/work/proj";
+  // Your own memory and instruction files under ~/.claude
+  assert.equal(defaultTier("file", "/h/.claude/CLAUDE.md", proj, home), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/rules/style.md", proj, home), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/skills/deploy/SKILL.md", proj, home), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/skills/deploy/helper.sh", proj, home), "T1");
+  assert.equal(defaultTier("file", "/h/.claude/projects/p/memory/topic.md", proj, home), "T1");
+  // CLAUDE.md files in directories above the project, which Claude Code loads
+  assert.equal(defaultTier("file", "/h/work/CLAUDE.md", proj, home), "T1");
+  assert.equal(defaultTier("file", "/h/work/CLAUDE.local.md", proj, home), "T1");
+  assert.equal(defaultTier("file", "/h/CLAUDE.md", proj, home), "T1");
+  // Third-party files that merely share the names are not trusted
+  assert.equal(defaultTier("file", "/elsewhere/AGENTS.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/elsewhere/CLAUDE.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/h/work/other/CLAUDE.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/h/work/AGENTS.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/tmp/x/.claude/skills/a/SKILL.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/tmp/x/.claude/rules/r.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/tmp/.claude/projects/p/memory/x.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/skills/../../evil/CLAUDE.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/h/work/proj/node_modules/pkg/CLAUDE.md", proj, home), "T3");
+  assert.equal(defaultTier("file", "/h/work/proj/node_modules/pkg/.claude/skills/s/SKILL.md", proj, home), "T3");
+  // Other files under ~/.claude stay untrusted
+  assert.equal(defaultTier("file", "/elsewhere/README.md", proj, home), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/projects/p/transcript.jsonl", proj, home), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/settings.json", proj, home), "T4");
+  // Unknown project root: no ancestors are trusted
+  assert.equal(defaultTier("file", "/CLAUDE.md", "/\u0000pvg-unknown-root", home), "T4");
+  assert.equal(defaultTier("file", "/h/.claude/CLAUDE.md", "/\u0000pvg-unknown-root", home), "T1");
+  // Your rules can still demote trusted files
+  const demote: TrustConfig = { rules: [{ type: "path", match: "/h/work/**", tier: "T4" }] };
+  assert.equal(classify("file", "/h/work/CLAUDE.md", proj, demote, home), "T4");
 });

@@ -40,7 +40,7 @@ Changes to Claude Code settings files (`.claude/settings.json`, `.claude/setting
 
 Everything stays on your machine in `~/.pvg/` (files are mode 0600). pvg makes no network calls, uses no AI models and has no telemetry.
 
-pvg stores locally: your prompts, snapshots of memory and instruction files (current and previous versions), and Bash command strings. These are kept until `pvg uninstall --purge`. Only content read from untrusted sources (web pages, MCP results, network fetches, files outside your project other than agent memory and instruction files) expires after 30 days. `errors.log` holds error messages only, with no prompt or tool content. The timestamped settings.json backups that init and uninstall write remain after `pvg uninstall --purge`; delete them manually if needed.
+pvg stores locally: your prompts, snapshots of memory and instruction files (current and previous versions), and Bash command strings. These are kept until `pvg uninstall --purge`. Only content read from untrusted sources (web pages, MCP results, network fetches, files outside your project other than your own files under `~/.claude` and `CLAUDE.md` files in folders above the project) expires after 30 days. `errors.log` holds error messages only, with no prompt or tool content. The timestamped settings.json backups that init and uninstall write remain after `pvg uninstall --purge`; delete them manually if needed.
 
 ## Limitations (v0.1)
 
@@ -53,6 +53,7 @@ pvg stores locally: your prompts, snapshots of memory and instruction files (cur
 - **`--protect-data` blocks Claude's edit tools, not shell commands** that write to `~/.pvg`.
 - **Attribution only looks at untrusted content read earlier in the same session;** content read in an earlier session is not linked to a later change.
 - **Files inside the project, including repos cloned into it, are trusted by default.** Demote them with `pvg trust add '/abs/path/**' --tier untrusted`.
+- **Outside the project, only your own memory and instruction files are trusted:** `~/.claude/CLAUDE.md`, `~/.claude/rules/`, `~/.claude/skills/`, `~/.claude/projects/*/memory/`, and `CLAUDE.md` / `CLAUDE.local.md` in folders above the project. A `CLAUDE.md`, `AGENTS.md` or `SKILL.md` anywhere else, including inside `node_modules`, is untrusted.
 - **Not yet verified against a real Claude Code session:** the PostToolUse payload field names and the live demo.
 
 ## License

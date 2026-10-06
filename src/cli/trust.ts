@@ -50,7 +50,7 @@ export function runTrust(args: string[], env: Env, now: Date = new Date()): CmdR
     const cfg = loadTrust(path);
     const L: string[] = [];
     if (cfg.rules.length === 0) {
-      L.push("No trust rules yet. Defaults: your prompts and workspace files are trusted; web, MCP, network, dependency and outside-project files are untrusted.");
+      L.push("No trust rules yet. Defaults: your prompts, workspace files, your own ~/.claude memory and instruction files, and CLAUDE.md files above the project are trusted; web, MCP, network, dependency and other outside-project files are untrusted.");
     } else {
       L.push("Trust rules:");
       for (const r of cfg.rules) L.push(`  ${r.type} ${r.match} ${r.tier} (${TIER_NAMES[r.tier]})`);

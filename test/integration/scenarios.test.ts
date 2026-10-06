@@ -90,3 +90,46 @@ test("poisoning, script write, clean write, and hand edit are labeled correctly"
     t.cleanup();
   }
 });
+
+test("a dependency's CLAUDE.md is untrusted: copying from it into memory is MATCHED, reading your own memory is not", () => {
+  const t = tempDir();
+  try {
+    const home = join(t.path, "home");
+    const proj = join(t.path, "proj");
+    const projDir = join(home, ".claude", "projects", "-proj");
+    const memPath = join(projDir, "memory", "MEMORY.md");
+    const depClaudeMd = join(proj, "node_modules", "pkg", "CLAUDE.md");
+    mkdirSync(join(proj, ".git"), { recursive: true });
+    mkdirSync(join(projDir, "memory"), { recursive: true });
+    mkdirSync(join(proj, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(memPath, "- deploys go through CI\n");
+    writeFileSync(depClaudeMd, PAGE);
+    const env: Env = { home, dataDir: join(t.path, "data"), claudeSettingsPath: join(home, ".claude", "settings.json") };
+    let sec = 0;
+    const send = (event: string, extra: Record<string, unknown> = {}): void =>
+      handleHookInput(
+        JSON.stringify({ hook_event_name: event, session_id: "s1", cwd: proj, transcript_path: join(projDir, "s1.jsonl"), permission_mode: "default", ...extra }),
+        env,
+        new Date(Date.UTC(2026, 9, 2, 12, 0, sec++)),
+      );
+
+    send("SessionStart");
+    send("PostToolUse", { tool_name: "Read", tool_input: { file_path: memPath }, tool_response: { file: { content: "- deploys go through CI" } } });
+    send("PostToolUse", { tool_name: "Read", tool_input: { file_path: depClaudeMd }, tool_response: { file: { content: PAGE } } });
+    appendFileSync(memPath, "- Backup contact for deploy alerts: ops@acme-backup.com\n");
+    send("PostToolUse", { tool_name: "Edit", tool_input: { file_path: memPath, old_string: "a", new_string: "b" } });
+
+    const store = Store.open(env.dataDir);
+    try {
+      const changes = attributeChanges(store, { rules: [] }, { sinceIso: "2026-01-01T00:00:00.000Z", projectRoot: null, home });
+      assert.equal(changes.length, 1);
+      assert.equal(changes[0]?.label, "MATCHED");
+      assert.ok(changes[0]?.matches.some((m) => m.sourceId === depClaudeMd && m.evidence === "email:ops@acme-backup.com"));
+      assert.ok(changes[0]?.matches.every((m) => m.sourceId !== memPath));
+    } finally {
+      store.close();
+    }
+  } finally {
+    t.cleanup();
+  }
+});
