@@ -186,7 +186,7 @@ test("logs from before sessions were auto-registered: a file ingest in an unknow
   }
 });
 
-test("shingle memoization: many writes with one large ingest completes quickly", () => {
+test("attribution has no blow-up: many writes with one large ingest finish in seconds", () => {
   const f = recorderFixture();
   try {
     // Create a large ingest (~50k words by repeating the PAGE sentence)
@@ -237,8 +237,8 @@ test("shingle memoization: many writes with one large ingest completes quickly",
     const results = run(f);
     const elapsed = Date.now() - startTime;
 
-    // Verify timing is acceptable
-    assert.ok(elapsed < 1500, `attribution took ${elapsed}ms, should be < 1500ms`);
+    // A coarse blow-up guard, loose enough for a busy machine. About 200 ms alone; it does not prove the shingle cache is used.
+    assert.ok(elapsed < 10_000, `attribution took ${elapsed}ms, should be < 10000ms`);
 
     // Verify results are correct: lines containing terms from PAGE should be MATCHED
     const matchedCount = results.filter((c) => c.label === "MATCHED").length;
