@@ -214,3 +214,65 @@ test("M3: a file ingest whose session has no recorded start counts as untrusted"
     f.cleanup();
   }
 });
+
+function syncedSkill(f: ReturnType<typeof recorderFixture>, name: string, dir = "synced/abc"): string {
+  const path = join(f.home, ".claude", "skills", dir, name, "SKILL.md");
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, "# Skill\n");
+  return path;
+}
+const buildFor = (f: ReturnType<typeof recorderFixture>) =>
+  buildReport(f.store, f.deps.trust, { sinceIso: SINCE, projectRoot: null, home: f.home, health: HEALTH, now: new Date("2026-10-03T00:00:00Z") });
+
+test("Claude app skill updates between sessions collapse to one line and stay in the JSON", () => {
+  const f = recorderFixture();
+  try {
+    const a = syncedSkill(f, "pptx");
+    const b = syncedSkill(f, "deep-research");
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    appendFileSync(a, "- update one\n");
+    appendFileSync(b, "- update\n");
+    record({ ...f.base("s2"), kind: "session_start", permissionMode: null }, f.deps);
+    appendFileSync(a, "- update two\n");
+    record({ ...f.base("s3"), kind: "session_start", permissionMode: null }, f.deps);
+    const r = buildFor(f);
+    assert.equal(r.changes.length, 0);
+    assert.equal(r.counts.UNATTRIBUTED_BETWEEN, 0);
+    const text = renderText(r);
+    assert.match(text, /Claude app updated 3 skill file\(s\) between sessions: deep-research, pptx \(2\)/);
+    assert.doesNotMatch(text, /\[UNATTRIBUTED \(between sessions\)\]/);
+    assert.deepEqual((JSON.parse(reportJson(r)) as { appSkillUpdates: Array<{ surfacePath: string }> }).appSkillUpdates.map((u) => u.surfacePath).sort(), [a, a, b].sort());
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("a change to an app skill during a session stays in the full list", () => {
+  const f = recorderFixture();
+  try {
+    const a = syncedSkill(f, "pptx");
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    appendFileSync(a, "- changed by a script\n");
+    record({ ...f.base("s1"), kind: "bash", toolName: "Bash", command: "./script.sh", output: "" }, f.deps);
+    const r = buildFor(f);
+    assert.deepEqual(r.changes.map((c) => c.event.surfacePath), [a]);
+    assert.equal(r.appSkillUpdates.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("your own skill changing between sessions stays in the full list", () => {
+  const f = recorderFixture();
+  try {
+    const mine = syncedSkill(f, "deploy", "mine");
+    record({ ...f.base("s1"), kind: "session_start", permissionMode: null }, f.deps);
+    appendFileSync(mine, "- changed outside a session\n");
+    record({ ...f.base("s2"), kind: "session_start", permissionMode: null }, f.deps);
+    const r = buildFor(f);
+    assert.deepEqual(r.changes.map((c) => c.event.surfacePath), [mine]);
+    assert.equal(r.appSkillUpdates.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});

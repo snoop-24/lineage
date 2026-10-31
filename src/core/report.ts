@@ -42,6 +42,7 @@ export interface ReportData {
   };
   changes: AttributedChange[];
   settingsChanges: AttributedChange[];
+  appSkillUpdates: AttributedChange[];
   counts: Record<Label, number>;
   proposal: ProposalItem[];
   health: ReportHealth;
@@ -68,6 +69,13 @@ export function isSettingsPath(path: string): boolean {
 export function settingsChangeFlagged(c: AttributedChange): boolean {
   const touchesHooks = (l: string): boolean => l.includes('"hooks"') || l.includes('"disableAllHooks"');
   return c.addedLines.some(touchesHooks) || c.removedLines.some((l) => touchesHooks(l) || l.includes("Edit("));
+}
+
+// The Claude app rewrites its own skills in ~/.claude/skills/synced/ between sessions. A change there with any
+// session behind it keeps its normal label and stays in the full list.
+export function isAppSkillUpdate(c: AttributedChange, home: string): boolean {
+  const path = c.event.surfacePath ?? "";
+  return c.label === "UNATTRIBUTED_BETWEEN" && basename(path) === "SKILL.md" && path.startsWith(`${home}/.claude/skills/synced/`);
 }
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -106,7 +114,8 @@ export function buildReport(store: Store, trust: TrustConfig, o: BuildOptions): 
     top.set(label, (top.get(label) ?? 0) + 1);
   }
   const attributed = attributeChanges(store, trust, { sinceIso: o.sinceIso, projectRoot: o.projectRoot, home: o.home });
-  const changes = attributed.filter((c) => !isSettingsPath(c.event.surfacePath ?? ""));
+  const appSkillUpdates = attributed.filter((c) => isAppSkillUpdate(c, o.home));
+  const changes = attributed.filter((c) => !isSettingsPath(c.event.surfacePath ?? "") && !isAppSkillUpdate(c, o.home));
   const settingsChanges = attributed.filter((c) => isSettingsPath(c.event.surfacePath ?? "")).sort((a, b) => a.event.id - b.event.id);
   const counts = Object.fromEntries(LABEL_ORDER.map((l) => [l, 0])) as Record<Label, number>;
   for (const c of changes) counts[c.label] += 1;
@@ -125,6 +134,7 @@ export function buildReport(store: Store, trust: TrustConfig, o: BuildOptions): 
     },
     changes,
     settingsChanges,
+    appSkillUpdates,
     counts,
     proposal: proposeTrust(ingests),
     health: o.health,
@@ -168,6 +178,15 @@ function renderChange(c: AttributedChange, home: string): string[] {
   return L;
 }
 
+function appSkillSummary(updates: AttributedChange[]): string {
+  const counts = new Map<string, number>();
+  for (const c of updates) {
+    const name = basename(dirname(c.event.surfacePath ?? ""));
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, n]) => safe(n > 1 ? `${name} (${n})` : name)).join(", ");
+}
+
 export function renderText(r: ReportData): string {
   const L: string[] = [];
   const scope = r.projectRoot ? ` (project ${safe(tilde(r.projectRoot, r.home))})` : "";
@@ -188,6 +207,9 @@ export function renderText(r: ReportData): string {
   L.push("", `MEMORY CHANGES: ${r.changes.length} total. ${LABEL_ORDER.map((l) => `${LABEL_TITLES[l]} ${r.counts[l]}`).join(", ")}`);
   for (const c of r.changes) {
     if (c.label !== "CLEAN") L.push("", ...renderChange(c, r.home));
+  }
+  if (r.appSkillUpdates.length > 0) {
+    L.push("", `  Claude app updated ${r.appSkillUpdates.length} skill file(s) between sessions: ${appSkillSummary(r.appSkillUpdates)}`);
   }
   if (r.settingsChanges.length > 0) {
     const flagged = r.settingsChanges.filter(settingsChangeFlagged).length;
@@ -224,6 +246,13 @@ export function reportJson(r: ReportData): string {
         kind: c.event.kind,
         tool: c.event.toolName,
         flagged: settingsChangeFlagged(c),
+        addedLines: c.addedLines,
+        removedLines: c.removedLines,
+      })),
+      appSkillUpdates: r.appSkillUpdates.map((c) => ({
+        surfacePath: c.event.surfacePath,
+        sessionId: c.event.sessionId,
+        ts: c.event.ts,
         addedLines: c.addedLines,
         removedLines: c.removedLines,
       })),
