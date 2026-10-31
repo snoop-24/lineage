@@ -58,8 +58,8 @@ test("status reports health and integrity", () => {
   try {
     const out = runStatus(env).out;
     assert.match(out, /Hooks installed: no/);
-    assert.match(out, /Events: 3 \(ingest 3\)/);
-    assert.match(out, /Log integrity: OK \(3 events\)/);
+    assert.match(out, /Events: 5 \(ingest 3, session_start 2\)/);
+    assert.match(out, /Log integrity: OK \(5 events\)/);
     assert.match(out, /Errors logged: 0/);
   } finally {
     f.cleanup();

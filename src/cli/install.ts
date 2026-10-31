@@ -7,7 +7,7 @@ import {
 } from "../claude-settings.ts";
 import { baseline } from "../core/recorder.ts";
 import { Store } from "../core/store.ts";
-import { managedClaudeMd, userSurfaceTargets } from "../core/surfaces.ts";
+import { existingMemoryTargets, managedClaudeMd, userSurfaceTargets } from "../core/surfaces.ts";
 import { loadConfig, saveConfig } from "../config.ts";
 import { configPath, ensureDataDir, resolveEnv, type Env } from "../paths.ts";
 import { emit, ok, usage, type CmdResult } from "./result.ts";
@@ -101,7 +101,7 @@ export function runInit(env: Env, o: InitOptions): InitResult {
   const store = Store.open(env.dataDir);
   let baselined = 0;
   try {
-    const targets = userSurfaceTargets(env.home);
+    const targets = [...userSurfaceTargets(env.home), ...existingMemoryTargets(env.home)];
     const managed = managedClaudeMd(o.platform);
     if (managed) targets.push({ path: managed, scope: "managed", trackAbsent: false });
     baselined = baseline(targets, store, o.now.toISOString());
@@ -262,7 +262,7 @@ export function initCli(args: string[], env: Env, now: Date = new Date(), cliPat
   if (r.changes.length === 0) L.push("  No changes: lineage hooks are already installed.");
   for (const c of r.changes) L.push(`  - ${c}`);
   if (r.backupPath) L.push(`Backup of previous settings: ${r.backupPath}`);
-  if (!dryRun) L.push(`Baselined ${r.baselined} user-level memory/instruction file(s).`, `Data directory: ${env.dataDir}`);
+  if (!dryRun) L.push(`Baselined ${r.baselined} existing memory/instruction file(s).`, `Data directory: ${env.dataDir}`);
   if (!protectData) {
     L.push(`Recommended: run \`lineage init --protect-data\` to deny agents write access to ${env.dataDir} (adds Claude Code rule ${denyRuleFor(env)}).`);
   }

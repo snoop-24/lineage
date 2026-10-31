@@ -58,16 +58,25 @@ function safeReadSettings(path: string): Settings {
   }
 }
 
+function startSession(ev: CommonEvent, permissionMode: string | null, ctx: SurfaceContext, d: RecorderDeps, detail: Record<string, unknown>): void {
+  d.store.upsertSession({ id: ev.sessionId, projectRoot: ev.projectRoot, startedAt: ev.ts, permissionMode });
+  d.store.insertEvent(newEvent(ev, { kind: "session_start", detail }));
+  // A file this same event wrote must reach the write path, not be absorbed into the baseline.
+  const written = ev.kind === "file_write" ? resolve(ev.filePath) : null;
+  scanAndRecord(discoverSurfaces(ctx).filter((t) => t.path !== written), ev, d, "between_sessions", null);
+  d.store.pruneIngestBlobs(new Date(Date.parse(ev.ts) - d.retentionDays * 86_400_000).toISOString());
+}
+
 export function record(ev: CommonEvent, d: RecorderDeps): void {
   const ctx: SurfaceContext = { home: d.home, projectRoot: ev.projectRoot, memoryDir: ev.memoryDir, platform: d.platform };
+  // A session already running at install never sends SessionStart: register it on its first event.
+  if (ev.kind !== "session_start" && !d.store.getSession(ev.sessionId)) {
+    startSession(ev, null, ctx, d, { projectRoot: ev.projectRoot, startedBeforeInstall: true });
+  }
   switch (ev.kind) {
-    case "session_start": {
-      d.store.upsertSession({ id: ev.sessionId, projectRoot: ev.projectRoot, startedAt: ev.ts, permissionMode: ev.permissionMode });
-      d.store.insertEvent(newEvent(ev, { kind: "session_start", detail: { projectRoot: ev.projectRoot } }));
-      scanAndRecord(discoverSurfaces(ctx), ev, d, "between_sessions", null);
-      d.store.pruneIngestBlobs(new Date(Date.parse(ev.ts) - d.retentionDays * 86_400_000).toISOString());
+    case "session_start":
+      startSession(ev, ev.permissionMode, ctx, d, { projectRoot: ev.projectRoot });
       return;
-    }
     case "prompt": {
       const blob = d.store.putBlob(ev.text, d.ingestCapBytes);
       d.store.insertEvent(newEvent(ev, { kind: "prompt", provisionalTier: "T0", blobSha: blob.sha }));

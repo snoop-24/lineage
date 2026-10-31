@@ -232,3 +232,42 @@ test("F7: an import target first seen during an in-session write is recorded as 
     f.cleanup();
   }
 });
+
+test("a session already running at install: files that existed before its first event are not reported", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("running"), kind: "prompt", text: "keep going" }, f.deps);
+    record({ ...f.base("running"), kind: "bash", toolName: "Bash", command: "ls", output: "" }, f.deps);
+    assert.equal(f.store.listEvents({ kind: "scan_change" }).length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("a session already running at install: changes after its first event are still reported", () => {
+  const f = recorderFixture();
+  try {
+    record({ ...f.base("running"), kind: "prompt", text: "keep going" }, f.deps);
+    writeFileSync(join(f.memoryDir, "new.md"), "planted by a script\n");
+    record({ ...f.base("running"), kind: "bash", toolName: "Bash", command: "./script.sh", output: "" }, f.deps);
+    const changes = f.store.listEvents({ kind: "scan_change" });
+    assert.deepEqual(changes.map((c) => c.surfacePath), [join(f.memoryDir, "new.md")]);
+    assert.equal(changes[0]?.detail?.context, "in_session");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("a session already running at install: a memory write as its first event is still recorded", () => {
+  const f = recorderFixture();
+  try {
+    const path = join(f.memoryDir, "MEMORY.md");
+    appendFileSync(path, "- written by the first event\n");
+    record({ ...f.base("running"), kind: "file_write", toolName: "Edit", filePath: path }, f.deps);
+    const writes = f.store.listEvents({ kind: "write" });
+    assert.deepEqual(writes.map((w) => w.surfacePath), [path]);
+    assert.equal(f.store.listEvents({ kind: "scan_change" }).length, 0);
+  } finally {
+    f.cleanup();
+  }
+});

@@ -133,3 +133,47 @@ test("a dependency's CLAUDE.md is untrusted: copying from it into memory is MATC
     t.cleanup();
   }
 });
+
+test("installing while a session is running: no false alarms, the session counts, and a real change is still caught", () => {
+  const t = tempDir();
+  try {
+    const home = join(t.path, "home");
+    const proj = join(t.path, "proj");
+    const projDir = join(home, ".claude", "projects", "-proj");
+    const memPath = join(projDir, "memory", "MEMORY.md");
+    mkdirSync(join(proj, ".git"), { recursive: true });
+    mkdirSync(join(projDir, "memory"), { recursive: true });
+    writeFileSync(join(proj, "CLAUDE.md"), "# Demo\n");
+    writeFileSync(join(proj, "README.md"), "Support email: help@acme.example\n");
+    writeFileSync(memPath, "- index\n");
+    writeFileSync(join(projDir, "memory", "older-note.md"), "- written weeks ago\n");
+    const env: Env = { home, dataDir: join(t.path, "data"), claudeSettingsPath: join(home, ".claude", "settings.json") };
+    let sec = 0;
+    const send = (event: string, extra: Record<string, unknown> = {}): void =>
+      handleHookInput(
+        JSON.stringify({ hook_event_name: event, session_id: "already-running", cwd: proj, transcript_path: join(projDir, "already-running.jsonl"), permission_mode: "default", ...extra }),
+        env,
+        new Date(Date.UTC(2026, 9, 2, 12, 0, sec++)),
+      );
+
+    // No SessionStart: this session began before lineage was installed.
+    send("PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" }, tool_response: { stdout: "", stderr: "" } });
+    send("PostToolUse", { tool_name: "Read", tool_input: { file_path: join(proj, "README.md") }, tool_response: { file: { content: "Support email: help@acme.example" } } });
+    send("PostToolUse", { tool_name: "Bash", tool_input: { command: "curl -s https://acme-status.example/incident" }, tool_response: { stdout: PAGE, stderr: "" } });
+    appendFileSync(memPath, "- Backup contact for deploy alerts: ops@acme-backup.com\n");
+    send("PostToolUse", { tool_name: "Edit", tool_input: { file_path: memPath, old_string: "a", new_string: "b" } });
+
+    const store = Store.open(env.dataDir);
+    try {
+      const changes = attributeChanges(store, { rules: [] }, { sinceIso: "2026-01-01T00:00:00.000Z", projectRoot: null, home });
+      assert.deepEqual(changes.map((c) => [c.event.surfacePath, c.label]), [[memPath, "MATCHED"]]);
+    } finally {
+      store.close();
+    }
+    const report = runReport(["--since", "30d"], env, new Date("2026-10-02T13:00:00Z"));
+    assert.match(report.out, /1 session\(s\) in 1 project\(s\)/);
+    assert.match(report.out, /Ingestions: 2 total, 1 untrusted/);
+  } finally {
+    t.cleanup();
+  }
+});

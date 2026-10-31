@@ -153,18 +153,33 @@ test("blast radius timing: loads before change are not measured", () => {
   }
 });
 
-test("unknown session root: file ingest in unknown root is untrusted", () => {
+test("a session with no SessionStart keeps its project root: reading a workspace file stays trusted", () => {
   const f = recorderFixture();
   try {
-    // Note: no session_start for sx, so it has unknown root and file is treated as external
     record({ ...f.base("sx"), kind: "ingest", toolName: "Read", sourceKind: "file", sourceId: join(f.proj, "README.md"), text: "Config option for deploys" }, f.deps);
     appendFileSync(join(f.memoryDir, "MEMORY.md"), "- Support: help@acme.example\n");
     record({ ...f.base("sx"), kind: "file_write", toolName: "Write", filePath: join(f.memoryDir, "MEMORY.md") }, f.deps);
-    const results = run(f);
-    // Should be EXPOSED since with unknown root, the file is treated as external (T4)
-    // and there's no word/indicator match between file ingest and the added line
-    const relevant = results.filter((c) => c.addedLines.some((l) => l.includes("help@acme.example")));
+    const relevant = run(f).filter((c) => c.addedLines.some((l) => l.includes("help@acme.example")));
     assert.ok(relevant.length > 0);
+    assert.equal(relevant[0]?.label, "CLEAN");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("logs from before sessions were auto-registered: a file ingest in an unknown root is untrusted", () => {
+  const f = recorderFixture();
+  try {
+    const row = {
+      ts: "2026-10-02T12:00:00.000Z", sessionId: "old", agentId: null, toolName: null, sourceKind: null, sourceId: null,
+      provisionalTier: null, indicators: null, surfacePath: null, blobSha: null, prevBlobSha: null, detail: null,
+    };
+    const prev = f.store.putBlob("- deploys go through CI\n", Number.POSITIVE_INFINITY).sha;
+    const next = f.store.putBlob("- deploys go through CI\n- Support: help@acme.example\n", Number.POSITIVE_INFINITY).sha;
+    const read = f.store.putBlob("Config option for deploys", 1_048_576).sha;
+    f.store.insertEvent({ ...row, kind: "ingest", toolName: "Read", sourceKind: "file", sourceId: join(f.proj, "README.md"), provisionalTier: "T4", blobSha: read });
+    f.store.insertEvent({ ...row, kind: "write", toolName: "Write", surfacePath: join(f.memoryDir, "MEMORY.md"), blobSha: next, prevBlobSha: prev, detail: { change: "modified" } });
+    const relevant = run(f).filter((c) => c.addedLines.some((l) => l.includes("help@acme.example")));
     assert.equal(relevant[0]?.label, "EXPOSED");
   } finally {
     f.cleanup();

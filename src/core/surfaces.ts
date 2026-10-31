@@ -187,6 +187,15 @@ export function userSurfaceTargets(home: string, limits: WalkLimits = DEFAULT_LI
   return out;
 }
 
+// Memory that already exists for every project, so `lineage init` can baseline it before those projects' next sessions.
+export function existingMemoryTargets(home: string, limits: WalkLimits = DEFAULT_LIMITS): SurfaceTarget[] {
+  const projects = join(home, ".claude", "projects");
+  if (!existsSync(projects)) return [];
+  return readdirSync(projects).flatMap((name) =>
+    listFiles(join(projects, name, "memory"), limits).map((p): SurfaceTarget => ({ path: p, scope: "memory", trackAbsent: false })),
+  );
+}
+
 function projectTargets(ctx: SurfaceContext, limits: WalkLimits): SurfaceTarget[] {
   const out: SurfaceTarget[] = PROJECT_FILES.map((rel) => ({ path: join(ctx.projectRoot, rel), scope: "project", trackAbsent: true }));
   for (const f of listFiles(join(ctx.projectRoot, ".claude", "rules"), limits)) {

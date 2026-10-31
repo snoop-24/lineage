@@ -6,6 +6,8 @@ import { buildHookCommand, denyRuleFor, initCli, runInit, runUninstall } from ".
 import { hooksInstalled, readSettings } from "../src/claude-settings.ts";
 import { loadConfig } from "../src/config.ts";
 import { configPath, type Env } from "../src/paths.ts";
+import { record } from "../src/core/recorder.ts";
+import { Store } from "../src/core/store.ts";
 import { tempDir } from "./helpers.ts";
 
 const CMD = "'/usr/bin/node' --no-warnings '/x/cli.js' hook";
@@ -365,6 +367,30 @@ test("F2: purge deletes a normal lineage data dir; a missing data dir is a no-op
     const again = runUninstall(env, { purge: true, now: NOW });
     assert.equal(again.purged, false);
     assert.equal(existsSync(env.dataDir), false);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("init baselines existing project memory, so a file added before that project's next session is flagged", () => {
+  const { t, env } = setup();
+  try {
+    const memoryDir = join(env.home, ".claude", "projects", "-proj", "memory");
+    mkdirSync(memoryDir, { recursive: true });
+    writeFileSync(join(memoryDir, "MEMORY.md"), "- existing\n");
+    runInit(env, opts());
+    writeFileSync(join(memoryDir, "planted.md"), "added after install\n");
+    const store = Store.open(env.dataDir);
+    try {
+      assert.ok(store.getSurface(join(memoryDir, "MEMORY.md"))?.lastSha);
+      record(
+        { kind: "session_start", permissionMode: null, sessionId: "s1", ts: NOW.toISOString(), projectRoot: join(t.path, "proj"), agentId: null, memoryDir },
+        { store, trust: { rules: [] }, home: env.home, platform: "linux", settingsPath: env.claudeSettingsPath, installedCommand: null, ingestCapBytes: 1_048_576, retentionDays: 30 },
+      );
+      assert.deepEqual(store.listEvents({ kind: "scan_change" }).map((e) => e.surfacePath), [join(memoryDir, "planted.md")]);
+    } finally {
+      store.close();
+    }
   } finally {
     t.cleanup();
   }

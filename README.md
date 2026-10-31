@@ -51,6 +51,7 @@ Lineage stores locally: your prompts, snapshots of memory and instruction files 
 - **Indicator matching can produce occasional false matches** on common values.
 - **The event log detects edits to past entries, but not deletion of the newest entries** (no external anchor).
 - **`--protect-data` blocks Claude's edit tools, not shell commands** that write to `~/.lineage`.
+- **Sessions already running when you install are picked up on their next event.** A memory file outside `~/.claude/projects/*/memory/` that changed before that event becomes the new baseline, so that one change is not reported.
 - **Attribution only looks at untrusted content read earlier in the same session;** content read in an earlier session is not linked to a later change.
 - **Files inside the project, including repos cloned into it, are trusted by default.** Demote them with `lineage trust add '/abs/path/**' --tier untrusted`.
 - **Outside the project, only your own memory and instruction files are trusted:** `~/.claude/CLAUDE.md`, `~/.claude/rules/`, `~/.claude/skills/`, `~/.claude/projects/*/memory/`, and `CLAUDE.md` / `CLAUDE.local.md` in folders above the project. A `CLAUDE.md`, `AGENTS.md` or `SKILL.md` anywhere else, including inside `node_modules`, is untrusted.
